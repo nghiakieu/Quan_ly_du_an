@@ -1,0 +1,391 @@
+{
+  "bridge": {
+    "name": "Cầu Thạch Hãn",
+    "views": {
+      "plan": {
+        "viewBox": {
+          "width": 1400,
+          "height": 300
+        },
+        "enabled": true
+      },
+      "elevation": {
+        "viewBox": {
+          "width": 1400,
+          "height": 700
+        },
+        "enabled": true
+      }
+    },
+    "piers": [
+      {
+        "id": "P37R",
+        "label": "P37R",
+        "x": 150,
+        "components": {
+          "foundation": {
+            "piles": [
+              {
+                "x": 10,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M01"
+              },
+              {
+                "x": 40,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M01"
+              },
+              {
+                "x": 70,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M01"
+              },
+              {
+                "x": 25,
+                "y": 40,
+                "r": 8,
+                "blockCode": "M01"
+              },
+              {
+                "x": 55,
+                "y": 40,
+                "r": 8,
+                "blockCode": "M01"
+              }
+            ]
+          },
+          "footing": {
+            "x": 0,
+            "y": 560,
+            "width": 120,
+            "height": 50,
+            "blockCode": "M01",
+            "label": "Bệ"
+          },
+          "shaft": {
+            "x": 25,
+            "y": 320,
+            "width": 70,
+            "blocks": [
+              {
+                "height": 80,
+                "blockCode": "T01",
+                "label": "Đợt 1"
+              },
+              {
+                "height": 80,
+                "blockCode": "T01",
+                "label": "Đợt 2"
+              },
+              {
+                "height": 80,
+                "blockCode": "T01",
+                "label": "Đợt 3"
+              }
+            ]
+          },
+          "cap": {
+            "x": 10,
+            "y": 260,
+            "blocks": [
+              {
+                "width": 100,
+                "height": 30,
+                "blockCode": "XM01",
+                "label": "Đốt dưới"
+              },
+              {
+                "width": 70,
+                "height": 25,
+                "xOffset": 15,
+                "blockCode": "XM01",
+                "label": "Đốt trên"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "P36R",
+        "label": "P36R",
+        "x": 450,
+        "components": {
+          "foundation": {
+            "piles": [
+              {
+                "x": 10,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M02"
+              },
+              {
+                "x": 40,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M02"
+              },
+              {
+                "x": 70,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M02"
+              },
+              {
+                "x": 25,
+                "y": 40,
+                "r": 8,
+                "blockCode": "M02"
+              },
+              {
+                "x": 55,
+                "y": 40,
+                "r": 8,
+                "blockCode": "M02"
+              }
+            ]
+          },
+          "footing": {
+            "x": 0,
+            "y": 560,
+            "width": 120,
+            "height": 50,
+            "blockCode": "M02",
+            "label": "Bệ"
+          },
+          "shaft": {
+            "x": 25,
+            "y": 320,
+            "width": 70,
+            "blocks": [
+              {
+                "height": 80,
+                "blockCode": "T02",
+                "label": "Đợt 1"
+              },
+              {
+                "height": 80,
+                "blockCode": "T02",
+                "label": "Đợt 2"
+              },
+              {
+                "height": 80,
+                "blockCode": "T02",
+                "label": "Đợt 3"
+              }
+            ]
+          },
+          "cap": {
+            "x": 10,
+            "y": 260,
+            "blocks": [
+              {
+                "width": 100,
+                "height": 30,
+                "blockCode": "XM02",
+                "label": "Đốt dưới"
+              },
+              {
+                "width": 70,
+                "height": 25,
+                "xOffset": 15,
+                "blockCode": "XM02",
+                "label": "Đốt trên"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "id": "P35R",
+        "label": "P35R",
+        "x": 750,
+        "components": {
+          "foundation": {
+            "piles": [
+              {
+                "x": 10,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M03"
+              },
+              {
+                "x": 40,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M03"
+              },
+              {
+                "x": 70,
+                "y": 10,
+                "r": 8,
+                "blockCode": "M03"
+              },
+              {
+                "x": 25,
+                "y": 40,
+                "r": 8,
+                "blockCode": "M03"
+              },
+              {
+                "x": 55,
+                "y": 40,
+                "r": 8,
+                "blockCode": "M03"
+              }
+            ]
+          },
+          "footing": {
+            "x": 0,
+            "y": 560,
+            "width": 120,
+            "height": 50,
+            "blockCode": "M03",
+            "label": "Bệ"
+          },
+          "shaft": {
+            "x": 25,
+            "y": 320,
+            "width": 70,
+            "blocks": [
+              {
+                "height": 80,
+                "blockCode": "T03",
+                "label": "Đợt 1"
+              },
+              {
+                "height": 80,
+                "blockCode": "T03",
+                "label": "Đợt 2"
+              },
+              {
+                "height": 80,
+                "blockCode": "T03",
+                "label": "Đợt 3"
+              }
+            ]
+          },
+          "cap": {
+            "x": 10,
+            "y": 260,
+            "blocks": [
+              {
+                "width": 100,
+                "height": 30,
+                "blockCode": "XM03",
+                "label": "Đốt dưới"
+              },
+              {
+                "width": 70,
+                "height": 25,
+                "xOffset": 15,
+                "blockCode": "XM03",
+                "label": "Đốt trên"
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "spans": [
+      {
+        "id": "N1",
+        "label": "Nhịp 1",
+        "startPierX": 200,
+        "endPierX": 500,
+        "y": 230,
+        "components": {
+          "beam": {
+            "height": 60,
+            "blockCodes": [
+              "D01",
+              "D02"
+            ]
+          },
+          "deck": {
+            "height": 20,
+            "blockCode": "B01"
+          },
+          "railing": {
+            "height": 15,
+            "blockCode": "L01"
+          }
+        }
+      },
+      {
+        "id": "N2",
+        "label": "Nhịp 2",
+        "startPierX": 500,
+        "endPierX": 800,
+        "y": 230,
+        "components": {
+          "beam": {
+            "height": 60,
+            "blockCodes": [
+              "D03"
+            ]
+          },
+          "deck": {
+            "height": 20,
+            "blockCode": "B02"
+          },
+          "railing": {
+            "height": 15,
+            "blockCode": "L02"
+          }
+        }
+      }
+    ],
+    "blockMapping": {
+      "rules": [
+        {
+          "prefix": "M",
+          "component": "foundation",
+          "label": "Móng cọc"
+        },
+        {
+          "prefix": "B",
+          "component": "footing",
+          "label": "Bệ"
+        },
+        {
+          "prefix": "T",
+          "component": "shaft",
+          "label": "Thân trụ"
+        },
+        {
+          "prefix": "XM",
+          "component": "cap",
+          "label": "Xà mũ"
+        },
+        {
+          "prefix": "D",
+          "component": "beam",
+          "label": "Dầm"
+        },
+        {
+          "prefix": "B",
+          "component": "deck",
+          "label": "Bản mặt cầu"
+        },
+        {
+          "prefix": "L",
+          "component": "railing",
+          "label": "Lan can"
+        },
+        {
+          "prefix": "G",
+          "component": "bearing",
+          "label": "Gối cầu"
+        },
+        {
+          "prefix": "K",
+          "component": "joint",
+          "label": "Khe co giãn"
+        }
+      ]
+    }
+  }
+}

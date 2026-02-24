@@ -984,45 +984,96 @@ export default function SimpleDragTest() {
         ? `${process.env.NEXT_PUBLIC_API_URL}/diagrams`
         : 'http://localhost:8002/api/v1/diagrams';
 
-    // 1. Auto-Load on Mount
-    React.useEffect(() => {
-        const loadLatestDiagram = async () => {
-            try {
-                const res = await fetch(API_URL);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.length > 0) {
-                        // Sort by updated_at desc to get latest
-                        const latest = data.sort((a: { updated_at: string }, b: { updated_at: string }) =>
-                            new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
-                        )[0];
+    const fetchDiagramData = async () => {
+        try {
+            const res = await fetch(API_URL);
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.length > 0) {
+                    const latest = data.sort((a: { updated_at: string }, b: { updated_at: string }) =>
+                        new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+                    )[0];
 
-                        const loadedObjects = JSON.parse(latest.objects || '[]');
-                        const loadedBoq = JSON.parse(latest.boq_data || '[]');
+                    const loadedObjects = JSON.parse(latest.objects || '[]');
+                    const loadedBoq = JSON.parse(latest.boq_data || '[]');
+
+                    // Prevent state jump if this update was triggered by our own save
+                    // by checking if data actually differs
+                    if (JSON.stringify(loadedObjects) !== lastSavedData.current.objects ||
+                        JSON.stringify(loadedBoq) !== lastSavedData.current.boqData) {
 
                         setObjects(loadedObjects);
                         setBoqData(loadedBoq);
-                        setDiagramId(latest.id);
-
-                        // Auto-fit to screen on load
-                        handleFitToScreen(loadedObjects);
 
                         // Update ref to avoid immediate auto-save trigger
                         lastSavedData.current = {
                             objects: JSON.stringify(loadedObjects),
                             boqData: JSON.stringify(loadedBoq)
                         };
-                        setSaveStatus('saved');
+                        console.log("Real-time data synced!");
+                    }
+
+                    if (isFirstLoad.current) {
+                        setDiagramId(latest.id);
+                        handleFitToScreen(loadedObjects);
                     }
                 }
-            } catch (err) {
-                console.error("Failed to load initial diagram", err);
-            } finally {
+            }
+        } catch (err) {
+            console.error("Failed to load initial diagram", err);
+        } finally {
+            if (isFirstLoad.current) {
+                setSaveStatus('saved');
                 isFirstLoad.current = false;
             }
-        };
-        loadLatestDiagram();
+        }
+    };
+
+    // 1. Auto-Load on Mount
+    React.useEffect(() => {
+        fetchDiagramData();
     }, []);
+
+    // 1.5 Real-time Websocket Connection
+    React.useEffect(() => {
+        if (!diagramId) return;
+
+        // Build ws url based on current API URL
+        const wsUrl = API_URL.replace('http', 'ws').replace('/diagrams', `/diagrams/ws/${diagramId}`);
+
+        console.log(`[WS] Connecting to ${wsUrl}...`);
+        const ws = new WebSocket(wsUrl);
+
+        ws.onopen = () => {
+            console.log("[WS] Connected for real-time sync!");
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.event === "diagram_updated" || msg.event === "new_diagram") {
+                    console.log("[WS] Received update signal. Fetching new data...");
+                    // Only fetch if we are not actively dragging to avoid interrupting user
+                    if (!isDraggingRef.current) {
+                        fetchDiagramData();
+                    }
+                }
+            } catch (e) {
+                console.error("[WS] Error parsing message", e);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log("[WS] Connection closed.");
+        };
+
+        // Cleanup on unmount
+        return () => {
+            if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                ws.close();
+            }
+        };
+    }, [diagramId]);
 
     // 2. Debounced Auto-Save
     React.useEffect(() => {

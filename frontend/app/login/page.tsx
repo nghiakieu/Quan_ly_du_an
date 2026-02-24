@@ -86,7 +86,7 @@ export default function LoginPage() {
                     {isLogin ? 'Đăng nhập hệ thống' : 'Đăng ký tài khoản'}
                 </h2>
                 <p className="mt-2 text-center text-sm text-gray-600">
-                    Quản lý Tiến độ Công trình V2
+                    Quản lý Dự án Công trình V2
                 </p>
                 <div className="mt-4 flex justify-center space-x-4">
                     <button

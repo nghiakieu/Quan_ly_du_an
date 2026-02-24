@@ -23,7 +23,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
-    return {"message": "Welcome to Quan Ly Tien Do API"}
+    return {"message": "Welcome to Quan Ly Du An API"}
 
 @app.websocket("/api/v1/diagrams/ws/{diagram_id}")
 async def websocket_diagram_endpoint(websocket: WebSocket, diagram_id: str):

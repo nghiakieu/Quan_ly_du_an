@@ -6,7 +6,7 @@ import { AuthProvider } from '@/lib/auth';
 
 export const metadata: Metadata = {
   title: "Quản Lý Dự Án by Nghĩa Kiều",
-  description: "Hệ thống quản lý tiến độ dự án xây dựng",
+  description: "Hệ thống quản lý dự án xây dựng",
 };
 
 export default function RootLayout({

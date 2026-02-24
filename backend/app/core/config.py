@@ -2,7 +2,7 @@ from typing import List
 from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Quan Ly Tien Do API"
+    PROJECT_NAME: str = "Quan Ly Du An API"
     API_V1_STR: str = "/api/v1"
     
     # CORS Configuration - Allow all origins for Vercel deployment

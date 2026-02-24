@@ -41,6 +41,33 @@ def approve_user(
     db.refresh(user)
     return user
 
+@router.put("/{user_id}/role", response_model=UserSchema)
+def update_user_role(
+    *,
+    db: Session = Depends(deps.get_db),
+    user_id: int,
+    role: str,
+    current_user: User = Depends(deps.get_current_active_admin),
+) -> Any:
+    """
+    Update a user's role (admin, editor, viewer). Only allowed for admins.
+    """
+    if current_user.role != "admin": # Only true admins can change roles
+        raise HTTPException(status_code=403, detail="Only 'admin' can change roles")
+        
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if role not in ["admin", "editor", "viewer"]:
+        raise HTTPException(status_code=400, detail="Invalid role. Must be admin, editor, or viewer")
+
+    user.role = role
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
 @router.delete("/{user_id}", response_model=UserSchema)
 def delete_user(
     *,

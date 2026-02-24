@@ -67,6 +67,16 @@ export default function AdminUsersPage() {
         }
     };
 
+    const handleRoleChange = async (userId: number, newRole: string) => {
+        try {
+            await api.put(`/users/${userId}/role?role=${newRole}`);
+            // Refresh list after role update
+            fetchUsers();
+        } catch (err: any) {
+            alert(err.response?.data?.detail || 'Lỗi cập nhật vai trò');
+        }
+    };
+
     if (loading) return <div className="p-8 text-center text-gray-500">Đang tải...</div>;
     if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
@@ -105,9 +115,21 @@ export default function AdminUsersPage() {
                                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.username}</td>
                                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{u.email}</td>
                                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
-                                                <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${u.role === 'admin' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'}`}>
-                                                    {u.role}
-                                                </span>
+                                                {user?.role === 'admin' && u.id !== user.id ? (
+                                                    <select
+                                                        value={u.role}
+                                                        onChange={(e) => handleRoleChange(u.id, e.target.value)}
+                                                        className="mt-1 block w-full py-1 px-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                                                    >
+                                                        <option value="viewer">Viewer</option>
+                                                        <option value="editor">Editor</option>
+                                                        <option value="admin">Admin</option>
+                                                    </select>
+                                                ) : (
+                                                    <span className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${u.role === 'admin' ? 'bg-purple-100 text-purple-800' : u.role === 'editor' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}`}>
+                                                        {u.role}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                                 {u.is_active ? (
@@ -123,7 +145,7 @@ export default function AdminUsersPage() {
                                                     </button>
                                                 )}
                                                 {user?.role === 'admin' && u.id !== user.id && (
-                                                    <button onClick={() => handleDelete(u.id)} className="text-red-600 hover:text-red-900">
+                                                    <button onClick={() => handleDelete(u.id)} className="text-red-600 hover:text-red-900 ml-2">
                                                         Xóa
                                                     </button>
                                                 )}

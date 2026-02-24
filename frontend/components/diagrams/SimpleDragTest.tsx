@@ -1048,19 +1048,26 @@ export default function SimpleDragTest() {
             };
 
             try {
+                // Get token from localStorage since it's client side
+                const token = localStorage.getItem('token');
+                const headers = {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                };
+
                 let res;
                 if (diagramId) {
                     // Update existing
                     res = await fetch(`${API_URL}/${diagramId}`, {
                         method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headers,
                         body: JSON.stringify(payload)
                     });
                 } else {
                     // Create new
                     res = await fetch(API_URL, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: headers,
                         body: JSON.stringify(payload)
                     });
                 }
@@ -1075,6 +1082,7 @@ export default function SimpleDragTest() {
                     };
                     setSaveStatus('saved');
                 } else {
+                    console.error("Auto-save failed with status", res.status);
                     setSaveStatus('error');
                 }
             } catch (err) {

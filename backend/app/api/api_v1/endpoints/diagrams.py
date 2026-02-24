@@ -82,10 +82,11 @@ def update_diagram(
     db.refresh(diagram)
     
     # Phát tín hiệu báo sơ đồ có thay đổi
-    asyncio.create_task(manager.broadcast_to_diagram(
+    background_tasks.add_task(
+        manager.broadcast_to_diagram,
         diagram_id=str(diagram_id), 
         message={"event": "diagram_updated"}
-    ))
+    )
 
     return diagram
 

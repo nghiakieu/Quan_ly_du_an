@@ -1049,7 +1049,7 @@ export default function SimpleDragTest() {
 
             try {
                 // Get token from localStorage since it's client side
-                const token = localStorage.getItem('token');
+                const token = localStorage.getItem('access_token');
                 const headers = {
                     'Content-Type': 'application/json',
                     ...(token ? { 'Authorization': `Bearer ${token}` } : {})

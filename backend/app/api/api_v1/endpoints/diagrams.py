@@ -1,5 +1,5 @@
 from typing import Any, List
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from sqlalchemy.orm import Session
 import asyncio
 
@@ -33,7 +33,8 @@ def create_diagram(
     *,
     db: Session = Depends(get_db),
     diagram_in: DiagramCreate,
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user: User = Depends(deps.get_current_active_user),
+    background_tasks: BackgroundTasks
 ) -> Any:
     """
     Create new diagram.
@@ -49,10 +50,11 @@ def create_diagram(
     db.refresh(diagram)
     
     # Broadcast to websocket clients that a new diagram might be available
-    asyncio.create_task(manager.broadcast_to_diagram(
+    background_tasks.add_task(
+        manager.broadcast_to_diagram,
         diagram_id="all", 
         message={"event": "new_diagram", "data": {"id": diagram.id}}
-    ))
+    )
     return diagram
 
 @router.put("/{diagram_id}", response_model=Diagram)
@@ -61,7 +63,8 @@ def update_diagram(
     db: Session = Depends(get_db),
     diagram_id: int,
     diagram_in: DiagramUpdate,
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user: User = Depends(deps.get_current_active_user),
+    background_tasks: BackgroundTasks
 ) -> Any:
     """
     Update a diagram.

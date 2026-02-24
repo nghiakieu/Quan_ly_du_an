@@ -1268,14 +1268,6 @@ export default function SimpleDragTest() {
 
     return (
         <div className="w-full h-screen bg-gray-100 relative flex">
-            {/* Sync Notification Toast */}
-            {syncMessage && (
-                <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg z-100 animate-bounce font-medium flex items-center gap-2" style={{ zIndex: 9999 }}>
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 0 0 16.59 3.43M2.5 22v-6h6M21.87 8.43a9 9 0 0 0-16.59-3.43" /></svg>
-                    {syncMessage}
-                </div>
-            )}
-
             {/* Array Modal Removed - Now Inline */}
 
             {/* Properties Panel - Left  */}
@@ -1920,8 +1912,8 @@ export default function SimpleDragTest() {
                     ))}
                 </svg>
             </div>
-            {/* Save Status Indicator */}
-            <div className="absolute top-4 right-4 z-20 pointer-events-none">
+            {/* Notification Area (Save Status & Sync Status) */}
+            <div className="absolute top-4 right-4 z-20 pointer-events-none flex flex-col items-end gap-2">
                 {saveStatus === 'saving' && (
                     <div className="bg-white/80 backdrop-blur px-3 py-1.5 rounded-full shadow-sm border border-blue-100 flex items-center gap-2 text-xs font-medium text-blue-600 animate-pulse">
                         <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1947,6 +1939,12 @@ export default function SimpleDragTest() {
                             <line x1="12" y1="16" x2="12.01" y2="16" />
                         </svg>
                         Save Failed
+                    </div>
+                )}
+                {syncMessage && (
+                    <div className="bg-blue-50/90 backdrop-blur px-3 py-1.5 rounded-full shadow-sm border border-blue-200 flex items-center gap-2 text-xs font-medium text-blue-700 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.5 2v6h-6M2.13 15.57a9 9 0 0 0 16.59 3.43M2.5 22v-6h6M21.87 8.43a9 9 0 0 0-16.59-3.43" /></svg>
+                        Đồng bộ mới
                     </div>
                 )}
             </div>

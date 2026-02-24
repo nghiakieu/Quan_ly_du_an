@@ -134,17 +134,3 @@ def delete_diagram(
     db.commit()
     return diagram
 
-@router.websocket("/ws/{diagram_id}")
-async def websocket_diagram_endpoint(websocket: WebSocket, diagram_id: str):
-    """
-    Kênh WebSocket cho Client.
-    Client Connect vào để lắng nghe khi có sự thay đổi của Sơ đồ
-    """
-    await manager.connect(diagram_id, websocket)
-    try:
-        while True:
-            # Ở bản này ta chỉ quan tâm Broadcast từ Server xuống. 
-            # Dòng code này giữ kết nối luôn mở và bắt ping messages từ client nếu có.
-            data = await websocket.receive_text() 
-    except WebSocketDisconnect:
-        manager.disconnect(diagram_id, websocket)

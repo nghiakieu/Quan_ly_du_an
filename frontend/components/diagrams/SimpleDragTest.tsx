@@ -979,9 +979,9 @@ export default function SimpleDragTest() {
     const lastSavedData = React.useRef({ objects: '', boqData: '' });
     const isFirstLoad = React.useRef(true);
 
-    // Use hostname from browser to allow LAN access, with Port 8002 for V2
-    const API_URL = typeof window !== 'undefined'
-        ? `http://${window.location.hostname}:8002/api/v1/diagrams`
+    // Use custom env or fallback to localhost
+    const API_URL = process.env.NEXT_PUBLIC_API_URL
+        ? `${process.env.NEXT_PUBLIC_API_URL}/diagrams`
         : 'http://localhost:8002/api/v1/diagrams';
 
     // 1. Auto-Load on Mount

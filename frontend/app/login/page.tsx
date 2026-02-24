@@ -16,9 +16,7 @@ export default function LoginPage() {
     const { login } = useAuth();
     const router = useRouter();
 
-    const API_URL = typeof window !== 'undefined'
-        ? `http://${window.location.hostname}:8002/api/v1`
-        : 'http://localhost:8002/api/v1';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

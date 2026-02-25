@@ -11,8 +11,37 @@ import app.models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Auto-create missing tables on startup (safe - skips existing tables)."""
+    """
+    Auto-migration on startup:
+    1. Create any missing tables (tasks, project_users, etc.)
+    2. Add missing columns to existing tables (ALTER TABLE IF NOT EXISTS)
+    """
+    from sqlalchemy import text
+
+    # Step 1: Create all missing tables
     Base.metadata.create_all(bind=engine, checkfirst=True)
+
+    # Step 2: ALTER TABLE - add missing v1.3 columns to projects (safe IF NOT EXISTS)
+    alter_statements = [
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS investor TEXT",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS total_budget FLOAT",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS start_date TIMESTAMPTZ",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
+        "ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'planning'",
+    ]
+
+    try:
+        with engine.connect() as conn:
+            for stmt in alter_statements:
+                try:
+                    conn.execute(text(stmt))
+                except Exception:
+                    pass  # Column already exists or unsupported - skip silently
+            conn.commit()
+    except Exception:
+        pass  # SQLite (local dev) doesn't support IF NOT EXISTS for columns - skip
+
     yield
 
 

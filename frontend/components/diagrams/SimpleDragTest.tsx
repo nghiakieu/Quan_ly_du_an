@@ -81,7 +81,7 @@ function checkCollision(obj1: BoxObject, obj2: BoxObject): boolean {
  * - Editable dimensions
  * - Compact properties panel
  */
-export default function SimpleDragTest() {
+export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: { projectId?: string; diagramId?: number | null }) {
     const { isAuthenticated, user } = useAuth();
     const isAuthorized = isAuthenticated && (user?.role === 'admin' || user?.role === 'editor');
 
@@ -974,7 +974,7 @@ export default function SimpleDragTest() {
         // No need to close here, component calls onClose which we handle to set false
     };
 
-    const [diagramId, setDiagramId] = useState<number | null>(null);
+    const [currentDiagramId, setCurrentDiagramId] = useState<number | null>(propDiagramId ?? null);
     const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('idle');
     const lastSavedData = React.useRef({ objects: '', boqData: '' });
     const [syncMessage, setSyncMessage] = useState<string | null>(null);
@@ -987,37 +987,49 @@ export default function SimpleDragTest() {
 
     const fetchDiagramData = async () => {
         try {
-            const res = await fetch(API_URL);
-            if (res.ok) {
-                const data = await res.json();
-                if (data && data.length > 0) {
-                    const latest = data.sort((a: { updated_at: string }, b: { updated_at: string }) =>
-                        new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
-                    )[0];
+            let diagramData = null;
 
-                    const loadedObjects = JSON.parse(latest.objects || '[]');
-                    const loadedBoq = JSON.parse(latest.boq_data || '[]');
-
-                    // Prevent state jump if this update was triggered by our own save
-                    // by checking if data actually differs
-                    if (JSON.stringify(loadedObjects) !== lastSavedData.current.objects ||
-                        JSON.stringify(loadedBoq) !== lastSavedData.current.boqData) {
-
-                        setObjects(loadedObjects);
-                        setBoqData(loadedBoq);
-
-                        // Update ref to avoid immediate auto-save trigger
-                        lastSavedData.current = {
-                            objects: JSON.stringify(loadedObjects),
-                            boqData: JSON.stringify(loadedBoq)
-                        };
-                        console.log("Real-time data synced!");
+            if (currentDiagramId) {
+                // v1.3: Load specific diagram by ID
+                const res = await fetch(`${API_URL}/${currentDiagramId}`);
+                if (res.ok) {
+                    diagramData = await res.json();
+                }
+            } else {
+                // Fallback: fetch list and pick latest
+                const fetchUrl = projectId ? `${API_URL}?project_id=${projectId}` : API_URL;
+                const res = await fetch(fetchUrl);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.length > 0) {
+                        diagramData = data.sort((a: { updated_at: string }, b: { updated_at: string }) =>
+                            new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+                        )[0];
                     }
+                }
+            }
 
-                    if (isFirstLoad.current) {
-                        setDiagramId(latest.id);
-                        handleFitToScreen(loadedObjects);
-                    }
+            if (diagramData) {
+                const loadedObjects = JSON.parse(diagramData.objects || '[]');
+                const parsedBoq = JSON.parse(diagramData.boq_data || '[]');
+                const loadedBoq = Array.isArray(parsedBoq) ? parsedBoq : [];
+
+                if (JSON.stringify(loadedObjects) !== lastSavedData.current.objects ||
+                    JSON.stringify(loadedBoq) !== lastSavedData.current.boqData) {
+
+                    setObjects(loadedObjects);
+                    setBoqData(loadedBoq);
+
+                    lastSavedData.current = {
+                        objects: JSON.stringify(loadedObjects),
+                        boqData: JSON.stringify(loadedBoq)
+                    };
+                    console.log("Real-time data synced!");
+                }
+
+                if (isFirstLoad.current) {
+                    setCurrentDiagramId(diagramData.id);
+                    handleFitToScreen(loadedObjects);
                 }
             }
         } catch (err) {
@@ -1037,11 +1049,11 @@ export default function SimpleDragTest() {
 
     // 1.5 Real-time Websocket Connection
     React.useEffect(() => {
-        if (!diagramId) return;
+        if (!currentDiagramId) return;
 
         // Build ws url based on current API URL (support https -> wss)
         const baseUrl = API_URL.replace(/^http/, 'ws');
-        const wsUrl = `${baseUrl}/ws/${diagramId}`;
+        const wsUrl = `${baseUrl}/ws/${currentDiagramId}`;
 
         console.log(`[WS] Connecting to ${wsUrl}...`);
         const ws = new WebSocket(wsUrl);
@@ -1077,7 +1089,7 @@ export default function SimpleDragTest() {
                 ws.close();
             }
         };
-    }, [diagramId]);
+    }, [currentDiagramId]);
 
     // 2. Debounced Auto-Save
     React.useEffect(() => {
@@ -1099,7 +1111,8 @@ export default function SimpleDragTest() {
                 name: `Diagram ${new Date().toLocaleString()}`, // Or keep original name
                 description: 'Auto-saved',
                 objects: currentObjectsStr,
-                boq_data: currentBoqStr
+                boq_data: currentBoqStr,
+                project_id: projectId ? parseInt(projectId) : null
             };
 
             try {
@@ -1111,9 +1124,9 @@ export default function SimpleDragTest() {
                 };
 
                 let res;
-                if (diagramId) {
+                if (currentDiagramId) {
                     // Update existing
-                    res = await fetch(`${API_URL}/${diagramId}`, {
+                    res = await fetch(`${API_URL}/${currentDiagramId}`, {
                         method: 'PUT',
                         headers: headers,
                         body: JSON.stringify(payload)
@@ -1129,7 +1142,7 @@ export default function SimpleDragTest() {
 
                 if (res.ok) {
                     const data = await res.json();
-                    if (!diagramId) setDiagramId(data.id);
+                    if (!currentDiagramId) setCurrentDiagramId(data.id);
 
                     lastSavedData.current = {
                         objects: currentObjectsStr,
@@ -1147,7 +1160,7 @@ export default function SimpleDragTest() {
         }, 1000); // Debounce 1s
 
         return () => clearTimeout(timer);
-    }, [objects, boqData, diagramId]);
+    }, [objects, boqData, currentDiagramId]);
 
     // --- Array Feature ---
     const [showArrayPanel, setShowArrayPanel] = useState(false); // Using inline panel instead of modal

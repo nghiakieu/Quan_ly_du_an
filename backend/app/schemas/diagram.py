@@ -5,6 +5,7 @@ from datetime import datetime
 class DiagramBase(BaseModel):
     name: str
     description: Optional[str] = None
+    project_id: Optional[int] = None
 
 class DiagramCreate(DiagramBase):
     objects: str  # JSON string

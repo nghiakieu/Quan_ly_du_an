@@ -16,16 +16,22 @@ models.Base.metadata.create_all(bind=engine)
 
 router = APIRouter()
 
+from typing import Optional
+
 @router.get("/", response_model=List[Diagram])
 def read_diagrams(
     skip: int = 0,
     limit: int = 100,
+    project_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ) -> Any:
     """
     Retrieve diagrams.
     """
-    diagrams = db.query(DiagramModel).offset(skip).limit(limit).all()
+    query = db.query(DiagramModel)
+    if project_id is not None:
+        query = query.filter(DiagramModel.project_id == project_id)
+    diagrams = query.offset(skip).limit(limit).all()
     return diagrams
 
 @router.post("/", response_model=Diagram)
@@ -43,7 +49,8 @@ def create_diagram(
         name=diagram_in.name,
         description=diagram_in.description,
         objects=diagram_in.objects,
-        boq_data=diagram_in.boq_data
+        boq_data=diagram_in.boq_data,
+        project_id=diagram_in.project_id
     )
     db.add(diagram)
     db.commit()

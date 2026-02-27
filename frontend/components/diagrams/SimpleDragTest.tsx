@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import DraggableBox from './DraggableBox';
 import ObjectBOQAssignment from './ObjectBOQAssignment';
 import StatusPieChart from './StatusPieChart';
+import ProgressDashboard from './ProgressDashboard';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth';
 
@@ -81,7 +82,7 @@ function checkCollision(obj1: BoxObject, obj2: BoxObject): boolean {
  * - Editable dimensions
  * - Compact properties panel
  */
-export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: { projectId?: string; diagramId?: number | null }) {
+export default function SimpleDragTest({ projectId, diagramId: propDiagramId, diagramName }: { projectId?: string; diagramId?: number | null; diagramName?: string }) {
     const { isAuthenticated, user } = useAuth();
     const isAuthorized = isAuthenticated && (user?.role === 'admin' || user?.role === 'editor');
 
@@ -291,6 +292,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
 
 
     const [copiedObjects, setCopiedObjects] = useState<BoxObject[]>([]);
+    const importFileRef = React.useRef<HTMLInputElement>(null);
 
     // Keyboard navigation & Shortcuts
     React.useEffect(() => {
@@ -802,9 +804,18 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
     };
 
     const handleChangeId = (newId: string) => {
-        // changing ID on multi-select is dangerous/undefined behavior. 
         // Only allow if single selected
-        if (primarySelectedId && selectedIds.size === 1) {
+        if (primarySelectedId !== null && selectedIds.size === 1) {
+            // If empty string, allow typing but don't commit yet (avoid locking input)
+            if (newId === '') {
+                setObjects(prev =>
+                    prev.map(obj =>
+                        obj.id === primarySelectedId ? { ...obj, id: '' } : obj
+                    )
+                );
+                setSelectedIds(new Set(['']));
+                return;
+            }
             if (objects.some(obj => obj.id === newId && obj.id !== primarySelectedId)) {
                 alert('ID already exists!');
                 return;
@@ -1279,6 +1290,55 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
         }
     };
 
+    // --- Export & Import Diagram (JSON) ---
+    const handleExportDiagram = () => {
+        const exportData = {
+            format: 'diagram_export',
+            version: '1.0',
+            exported_at: new Date().toISOString(),
+            diagram_name: diagramName || 'diagram',
+            objects: objects,
+            boq_data: boqData,
+        };
+        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${(diagramName || 'diagram').replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().slice(0, 10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleImportDiagram = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (!window.confirm(`Nhập dữ liệu từ file "${file.name}" sẽ GHI ĐÈ toàn bộ sơ đồ hiện tại. Tiếp tục?`)) {
+            e.target.value = '';
+            return;
+        }
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const raw = ev.target?.result as string;
+                const parsed = JSON.parse(raw);
+                if (parsed.format !== 'diagram_export') {
+                    alert('File không đúng định dạng sơ đồ!');
+                    return;
+                }
+                isFirstLoad.current = true; // Prevent auto-save conflict during restore
+                setObjects(parsed.objects || []);
+                setBoqData(parsed.boq_data || []);
+                setSelectedIds(new Set());
+                setTimeout(() => { isFirstLoad.current = false; }, 100);
+                alert(`Nhập thành công! ${(parsed.objects || []).length} objects, ${(parsed.boq_data || []).length} BOQ items.`);
+            } catch {
+                alert('Lỗi đọc file JSON. Vui lòng kiểm tra lại!');
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = ''; // Reset input
+    };
+
     return (
         <div className="w-full h-screen bg-gray-100 relative flex">
             {/* Array Modal Removed - Now Inline */}
@@ -1303,12 +1363,39 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
                             </button>
                         )}
                         {boqData.length === 0 && <div />} {/* Spacer if only upload button exists */}
+
+                        {/* Export / Import JSON Buttons */}
+                        <div className="col-span-2 grid grid-cols-2 gap-1 mt-1">
+                            <button
+                                onClick={handleExportDiagram}
+                                className="px-2 py-1.5 text-xs bg-emerald-600 text-white rounded hover:bg-emerald-700 font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors"
+                                title="Xuất sơ đồ ra file JSON"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
+                                Xuất JSON
+                            </button>
+                            <button
+                                onClick={() => importFileRef.current?.click()}
+                                className="px-2 py-1.5 text-xs bg-indigo-600 text-white rounded hover:bg-indigo-700 font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors"
+                                title="Nhập sơ đồ từ file JSON"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
+                                Nhập JSON
+                            </button>
+                            <input
+                                ref={importFileRef}
+                                type="file"
+                                accept=".json"
+                                className="hidden"
+                                onChange={handleImportDiagram}
+                            />
+                        </div>
                     </div>
 
-                    {/* Properties Header */}
+                    {/* Diagram Name Header */}
                     <div className="mb-3 border-b pb-2">
-                        <h2 className="text-base font-bold text-gray-800">
-                            Properties
+                        <h2 className="text-sm font-bold text-gray-800 truncate" title={diagramName}>
+                            {diagramName || 'Sơ đồ thi công'}
                         </h2>
                     </div>                    {/* BOQ Modal */}
                     {showBOQModal && (
@@ -1409,12 +1496,6 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
                         </div>
                     )}
 
-                    {/* Stats */}
-                    <div className="mb-3 p-2 bg-gray-50 rounded text-xs">
-                        <p className="font-semibold">Objects: {objects.length}</p>
-                        <p>Selected: {selectedIds.size > 0 ? `${selectedIds.size} items` : 'None'}</p>
-                        <p>BOQ Items: {boqData.length}</p>
-                    </div>
 
                     {/* Add Buttons */}
                     {isAuthorized && (
@@ -1444,7 +1525,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
                     )}
 
                     {/* Modify Selected Object Section for Batch Edit */}
-                    {isAuthorized && selectedIds.size > 0 && selectedObject ? (
+                    {isAuthorized && selectedIds.size > 0 && selectedObject && (
                         <div className="space-y-2">
                             <div className="pt-2 border-t">
                                 <div className="flex justify-between items-start mb-2">
@@ -1761,10 +1842,6 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
                                 </div>
                             </div>
                         </div>
-                    ) : (
-                        <div className="mt-auto pt-4 text-center text-gray-400 text-xs italic">
-                            Select an object to edit properties
-                        </div>
                     )}
                 </div>
 
@@ -1832,6 +1909,9 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId }: 
                         );
                     })()}
                 </div>
+
+                {/* Progress Dashboard - Below Pie Chart */}
+                <ProgressDashboard objects={objects} />
             </div>
 
             {/* Canvas - Right */}

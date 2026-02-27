@@ -112,8 +112,10 @@ export default function PresenceCursors({
         return () => container.removeEventListener('mousemove', handleMouseMove);
     }, [containerRef]);
 
-    // Render remote cursors as overlay
-    const cursors = Object.values(remoteCursors);
+    // Render remote cursors as overlay — filter out own cursor
+    const cursors = Object.values(remoteCursors).filter(
+        (c) => c.username !== username
+    );
     if (cursors.length === 0) return null;
 
     return (

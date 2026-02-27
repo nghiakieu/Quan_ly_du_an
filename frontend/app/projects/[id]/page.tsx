@@ -149,7 +149,11 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                     </span>
                 </div>
                 <div ref={diagramContainerRef} className="relative flex-1 flex flex-col">
-                    <SimpleDragTest projectId={projectId} diagramId={activeDiagramId} />
+                    <SimpleDragTest
+                        projectId={projectId}
+                        diagramId={activeDiagramId}
+                        diagramName={project.diagrams?.find(d => d.id === activeDiagramId)?.name}
+                    />
                     <PresenceCursors
                         diagramId={activeDiagramId}
                         containerRef={diagramContainerRef as React.RefObject<HTMLElement>}

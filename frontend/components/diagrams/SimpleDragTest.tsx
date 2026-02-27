@@ -987,6 +987,8 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
 
     const [currentDiagramId, setCurrentDiagramId] = useState<number | null>(propDiagramId ?? null);
     const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('idle');
+    const [localDiagramName, setLocalDiagramName] = useState<string>(diagramName || 'Sơ đồ thi công');
+    const [lastUpdated, setLastUpdated] = useState<string | null>(null);
     const lastSavedData = React.useRef({ objects: '', boqData: '' });
     const [syncMessage, setSyncMessage] = useState<string | null>(null);
     const isFirstLoad = React.useRef(true);
@@ -1025,6 +1027,9 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                 const parsedBoq = JSON.parse(diagramData.boq_data || '[]');
                 const loadedBoq = Array.isArray(parsedBoq) ? parsedBoq : [];
 
+                if (diagramData.name) setLocalDiagramName(diagramData.name);
+                if (diagramData.updated_at) setLastUpdated(diagramData.updated_at);
+
                 if (JSON.stringify(loadedObjects) !== lastSavedData.current.objects ||
                     JSON.stringify(loadedBoq) !== lastSavedData.current.boqData) {
 
@@ -1047,7 +1052,6 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             console.error("Failed to load initial diagram", err);
         } finally {
             if (isFirstLoad.current) {
-                setSaveStatus('saved');
                 isFirstLoad.current = false;
             }
         }
@@ -1118,13 +1122,17 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         setSaveStatus('saving');
 
         const timer = setTimeout(async () => {
-            const payload = {
-                name: `Diagram ${new Date().toLocaleString()}`, // Or keep original name
-                description: 'Auto-saved',
+            const payload: any = {
                 objects: currentObjectsStr,
                 boq_data: currentBoqStr,
                 project_id: projectId ? parseInt(projectId) : null
             };
+
+            // Chỉ gửi name và description khi tạo mới sơ đồ (POST), không gửi khi cập nhật (PUT)
+            if (!currentDiagramId) {
+                payload.name = localDiagramName;
+                payload.description = 'Auto-saved';
+            }
 
             try {
                 // Get token from localStorage since it's client side
@@ -1393,10 +1401,23 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     </div>
 
                     {/* Diagram Name Header */}
-                    <div className="mb-3 border-b pb-2">
-                        <h2 className="text-sm font-bold text-gray-800 truncate" title={diagramName}>
-                            {diagramName || 'Sơ đồ thi công'}
-                        </h2>
+                    <div className="mb-3 border-b pb-2 flex justify-between items-center bg-gray-50 p-2 rounded-t-md">
+                        <div className="flex flex-col">
+                            <h2 className="text-sm font-bold text-gray-800 truncate" title={localDiagramName}>
+                                {localDiagramName}
+                            </h2>
+                            {lastUpdated && (
+                                <span className="text-[10px] text-gray-400">
+                                    Cập nhật: {new Date(lastUpdated).toLocaleString('vi-VN')}
+                                </span>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded bg-white border">
+                            {saveStatus === 'saving' && <span className="text-blue-500 animate-pulse">⏳ Đang lưu...</span>}
+                            {saveStatus === 'saved' && <span className="text-emerald-500">✓ Đã lưu</span>}
+                            {saveStatus === 'error' && <span className="text-red-500">⚠ Lỗi lưu</span>}
+                            {saveStatus === 'idle' && <span className="text-gray-400">-</span>}
+                        </div>
                     </div>                    {/* BOQ Modal */}
                     {showBOQModal && (
                         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-10">

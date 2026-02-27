@@ -13,7 +13,30 @@ import GanttChart from '@/components/GanttChart';
 import BOQSummary from '@/components/BOQSummary';
 import ProjectReport from '@/components/ProjectReport';
 import PresenceCursors from '@/components/PresenceCursors';
-import { ArrowLeft, Plus, FileText, Trash2, Eye, Building2, Banknote, Clock, ChevronRight } from 'lucide-react';
+import DiagramOverviewCard from '@/components/diagrams/DiagramOverviewCard';
+import { ArrowLeft, Plus, FileText, Trash2, Eye, Building2, Banknote, Clock, ChevronRight, ChevronDown, ListTodo, CalendarDays, Calculator, Users } from 'lucide-react';
+
+const CollapsibleSection = ({ title, defaultOpen = false, children, icon: Icon }: any) => {
+    const [isOpen, setIsOpen] = useState(defaultOpen);
+    return (
+        <div className="mb-6 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <button
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors border-b border-gray-100"
+                type="button"
+            >
+                <div className="flex items-center gap-2">
+                    {Icon && <Icon className="h-5 w-5 text-gray-500" />}
+                    <h2 className="text-[17px] font-semibold text-gray-800">{title}</h2>
+                </div>
+                {isOpen ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
+            </button>
+            <div className={`transition-all duration-300 ${isOpen ? 'opacity-100' : 'hidden opacity-0'}`}>
+                {children}
+            </div>
+        </div>
+    );
+};
 
 export default function ProjectDetail({ params }: { params: Promise<{ id: string }> }) {
     const unwrappedParams = use(params);
@@ -251,22 +274,32 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             </div>
 
             {/* Project Members */}
-            <div className="mb-6">
-                <ProjectMembers projectId={projectId} />
-            </div>
+            <CollapsibleSection title="Quản lý Thành viên" defaultOpen={false} icon={Users}>
+                <div className="p-4 bg-gray-50/50">
+                    <ProjectMembers projectId={projectId} />
+                </div>
+            </CollapsibleSection>
 
             {/* Kanban Board */}
-            <div className="mb-6">
-                <KanbanBoard projectId={projectId} />
-            </div>
+            <CollapsibleSection title="Bảng Công Việc (Kanban)" defaultOpen={false} icon={ListTodo}>
+                <div className="p-4 bg-gray-50/50">
+                    <KanbanBoard projectId={projectId} />
+                </div>
+            </CollapsibleSection>
 
             {/* Gantt Chart */}
-            <div className="mb-6">
-                <GanttChart projectId={projectId} />
-            </div>
+            <CollapsibleSection title="Tiến độ Thời gian (Gantt)" defaultOpen={false} icon={CalendarDays}>
+                <div className="p-4 bg-gray-50/50">
+                    <GanttChart projectId={projectId} />
+                </div>
+            </CollapsibleSection>
 
             {/* BOQ Summary (C4) */}
-            <BOQSummary projectId={projectId} />
+            <CollapsibleSection title="Tổng hợp khối lượng & Giá trị (BOQ)" defaultOpen={false} icon={Calculator}>
+                <div className="p-0">
+                    <BOQSummary projectId={projectId} />
+                </div>
+            </CollapsibleSection>
 
             {/* Diagrams Section Header */}
             <div className="flex items-center justify-between mb-4">
@@ -330,46 +363,14 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                     {project.diagrams.map((diagram) => (
-                        <div
+                        <DiagramOverviewCard
                             key={diagram.id}
-                            className="group bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:shadow-lg transition-all duration-200 p-5 cursor-pointer flex flex-col"
-                            onClick={() => setActiveDiagramId(diagram.id)}
-                        >
-                            <div className="flex items-start justify-between mb-3">
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
-                                        {diagram.name}
-                                    </h3>
-                                    {diagram.description && (
-                                        <p className="text-xs text-gray-500 mt-0.5 truncate">{diagram.description}</p>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-                                    {isAuthenticated && (user?.role === 'admin' || user?.role === 'editor') && (
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteDiagram(diagram.id, diagram.name);
-                                            }}
-                                            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                                            title="Xóa công trình"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="mt-auto pt-3 border-t border-gray-100 flex items-center justify-between">
-                                <span className="text-xs text-gray-400">
-                                    {diagram.updated_at ? `Cập nhật: ${formatDate(diagram.updated_at)}` : 'Mới tạo'}
-                                </span>
-                                <span className="inline-flex items-center gap-1 text-xs text-blue-600 font-medium group-hover:translate-x-0.5 transition-transform">
-                                    <Eye className="h-3.5 w-3.5" />
-                                    Mở sơ đồ
-                                </span>
-                            </div>
-                        </div>
+                            diagram={diagram}
+                            onOpen={() => setActiveDiagramId(diagram.id)}
+                            onDelete={() => handleDeleteDiagram(diagram.id, diagram.name)}
+                            isAuthenticated={isAuthenticated}
+                            canEdit={user?.role === 'admin' || user?.role === 'editor'}
+                        />
                     ))}
                 </div>
             )}

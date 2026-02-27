@@ -31,6 +31,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [token, setToken] = useState<string | null>(null);
     const [user, setUser] = useState<User | null>(null);
 
+    const logout = () => {
+        localStorage.removeItem('access_token');
+        setToken(null);
+        setUser(null);
+    };
+
     const fetchUser = async () => {
         try {
             const res = await api.post('/auth/test-token');
@@ -63,11 +69,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setToken(newToken);
     };
 
-    const logout = () => {
-        localStorage.removeItem('access_token');
-        setToken(null);
-        setUser(null);
-    };
+
 
     return (
         <AuthContext.Provider value={{ token, user, login, logout, isAuthenticated: !!token }}>

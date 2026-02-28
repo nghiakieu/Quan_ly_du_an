@@ -30,15 +30,16 @@ _global_ai_context_cache = None
 _global_ai_context_timestamp = 0
 CACHE_TTL_SECONDS = 300  # 5 phút
 
-def get_summarized_context(db: Session) -> str:
+def get_summarized_context(db: Session, force_refresh: bool = False) -> str:
     """Load all projects and summarize data to string for AI context, with caching."""
     global _global_ai_context_cache, _global_ai_context_timestamp
     
     current_time = time.time()
-    if _global_ai_context_cache is not None and (current_time - _global_ai_context_timestamp) < CACHE_TTL_SECONDS:
+    
+    if not force_refresh and _global_ai_context_cache is not None and (current_time - _global_ai_context_timestamp) < CACHE_TTL_SECONDS:
         return _global_ai_context_cache
         
-    print("AI Cache Miss: Reloading ALL projects from DB...")
+    print(f"AI Cache Miss (Force: {force_refresh}): Reloading ALL projects from DB...")
     
     all_projects = db.query(ProjectModel).all()
     context_data = {"all_projects": []}
@@ -153,6 +154,18 @@ def get_summarized_context(db: Session) -> str:
     _global_ai_context_timestamp = current_time
     
     return cache_str
+
+@router.get("/sync")
+def sync_data_to_ram(db: Session = Depends(get_db)) -> Any:
+    """
+    Force refresh the in-memory cache with the latest DB data.
+    """
+    try:
+        get_summarized_context(db, force_refresh=True)
+        return {"message": "Đồng bộ dữ liệu lên RAM Server thành công.", "timestamp": time.time()}
+    except Exception as e:
+        print(f"Lỗi khi đồng bộ CACHE: {e}")
+        raise HTTPException(status_code=500, detail="Không thể đồng bộ dữ liệu vào lúc này.")
 
 @router.post("/chat")
 def chat_with_project_data(

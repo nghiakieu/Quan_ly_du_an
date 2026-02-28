@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Bot, X, Send, User, Sparkles, Loader2, Settings, Trash2 } from 'lucide-react';
+import { Bot, X, Send, User, Sparkles, Loader2, Settings, Trash2, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { api } from '@/lib/api';
+import { toast } from 'sonner';
 
 interface Message {
     id: string;
@@ -24,6 +25,7 @@ export default function AIChatBot() {
     ]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [tempApiKey, setTempApiKey] = useState('');
@@ -97,6 +99,27 @@ export default function AIChatBot() {
         }
     };
 
+    const handleSync = async () => {
+        setIsSyncing(true);
+        try {
+            const response = await api.get('/ai/sync');
+            const toastMsg = response.data?.message || 'Đồng bộ dữ liệu thành công';
+            toast.success(toastMsg);
+
+            setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                role: 'ai',
+                content: `✅ Hệ thống đã nạp dữ liệu Dự án MỚI NHẤT lên Cache của AI thành công! Bạn muốn hỏi gì với thông tin mới này?`
+            }]);
+        } catch (error: any) {
+            console.error("AI Sync Error:", error);
+            const errorMsg = error.response?.data?.detail || "Đã xảy ra lỗi khi đồng bộ dữ liệu.";
+            toast.error(errorMsg);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
             {/* Cửa sổ Chat */}
@@ -126,6 +149,14 @@ export default function AIChatBot() {
                                 title="Xóa lịch sử trò chuyện"
                             >
                                 <Trash2 className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="text-blue-100 p-1.5 rounded-lg transition-colors hover:bg-white/10 hover:text-white"
+                                title="Làm mới Dữ liệu Dự án lên AI Cache"
+                            >
+                                <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
                             </button>
                             <button
                                 onClick={() => setShowSettings(!showSettings)}

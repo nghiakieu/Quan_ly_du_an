@@ -13,6 +13,8 @@ from app.schemas.user import User as UserSchema, UserCreate, ForgotPassword, Res
 from app.utils.email import send_reset_password_email
 router = APIRouter()
 
+from sqlalchemy import or_
+
 @router.post("/login/access-token", response_model=Token)
 def login_access_token(
     db: Session = Depends(deps.get_db), form_data: OAuth2PasswordRequestForm = Depends()
@@ -20,7 +22,9 @@ def login_access_token(
     """
     OAuth2 compatible token login, get an access token for future requests
     """
-    user = db.query(User).filter(User.username == form_data.username).first()
+    user = db.query(User).filter(
+        or_(User.username == form_data.username, User.email == form_data.username)
+    ).first()
     if not user or not security.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=400, detail="Incorrect email or password")
     elif not user.is_active:

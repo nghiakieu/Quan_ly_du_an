@@ -30,6 +30,8 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'planning'",
         "ALTER TABLE diagrams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token VARCHAR",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expire TIMESTAMPTZ",
     ]
 
     try:
@@ -42,6 +44,30 @@ async def lifespan(app: FastAPI):
             conn.commit()
     except Exception:
         pass  # SQLite (local dev) doesn't support IF NOT EXISTS for columns - skip
+
+    # Step 3: Create Default Admin Account if not exists
+    from app.db.database import SessionLocal
+    from app.models.user import User as UserModel
+    from app.core.security import get_password_hash
+    
+    db = SessionLocal()
+    try:
+        existing_admin = db.query(UserModel).filter(UserModel.role == "admin").first()
+        if not existing_admin:
+            print("[Startup] Khởi tạo tài khoản Admin mặc định (kieulinhnghia@gmail.com)")
+            default_admin = UserModel(
+                username="NghiaKieu",
+                email="kieulinhnghia@gmail.com",
+                hashed_password=get_password_hash("kieulinhnghia"),
+                role="admin",
+                is_active=True
+            )
+            db.add(default_admin)
+            db.commit()
+    except Exception as e:
+        print(f"[Startup] Lỗi khởi tạo tk Admin: {e}")
+    finally:
+        db.close()
 
     yield
 

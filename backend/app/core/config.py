@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-production-use-env-file"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7 # 7 days
-
+    
+    # SMTP Setup for Emails
+    SMTP_SERVER: str = "smtp.gmail.com"
+    SMTP_PORT: int = 587
+    SMTP_USER: str = "" # kieulinhnghia@gmail.com
+    SMTP_PASSWORD: str = "" # App Password
+    
     class Config:
         case_sensitive = True
         env_file = ".env"

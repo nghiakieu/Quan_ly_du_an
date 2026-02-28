@@ -52,8 +52,8 @@ async def lifespan(app: FastAPI):
     
     db = SessionLocal()
     try:
-        existing_admin = db.query(UserModel).filter(UserModel.role == "admin").first()
-        if not existing_admin:
+        existing_nghia = db.query(UserModel).filter(UserModel.username == "NghiaKieu").first()
+        if not existing_nghia:
             print("[Startup] Khởi tạo tài khoản Admin mặc định (kieulinhnghia@gmail.com)")
             default_admin = UserModel(
                 username="NghiaKieu",

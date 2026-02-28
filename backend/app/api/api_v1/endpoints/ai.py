@@ -59,6 +59,9 @@ def get_summarized_context(db: Session, force_refresh: bool = False) -> str:
                 objects = json.loads(diagram.objects) if diagram.objects else []
                 boq_data = json.loads(diagram.boq_data) if diagram.boq_data else []
                 
+                # Master BOQ dict for quick lookup
+                boq_dict = {str(item.get('id', '')): item for item in boq_data}
+                
                 # Group Objects by Label for Richer Context and Financial Analytics
                 object_groups = {}
                 completed_value_by_month = {} # Format: {"2024-02": 500000000}
@@ -72,15 +75,34 @@ def get_summarized_context(db: Session, force_refresh: bool = False) -> str:
                         # Fallback for completion timestamp/date
                         completed_at = metadata.get('completedAt') or obj.get('completionDate')
                         
-                        # Calculate Value (Contract Amount or Qty * Price)
-                        value = obj.get('contractAmount') 
-                        if not value:
-                            qty = obj.get('designQty') or 0
-                            price = obj.get('unitPrice') or 0
-                            value = float(qty) * float(price)
+                        # Calculate Value
+                        value = 0.0
+                        boq_ids_map = obj.get('boqIds')
+                        if boq_ids_map and isinstance(boq_ids_map, dict):
+                            # Mapped object logic (boqId: assigned_qty)
+                            for bid, assigned_qty in boq_ids_map.items():
+                                master_item = boq_dict.get(str(bid), {})
+                                price = master_item.get('unitPrice', 0)
+                                try:
+                                    value += float(assigned_qty) * float(price)
+                                except (ValueError, TypeError):
+                                    pass
                         else:
-                            value = float(value)
-                            
+                            # Fallback standard object logic
+                            fallback_val = obj.get('contractAmount') 
+                            if not fallback_val:
+                                qty = obj.get('designQty') or 0
+                                price = obj.get('unitPrice') or 0
+                                try:
+                                    value = float(qty) * float(price)
+                                except (ValueError, TypeError):
+                                    value = 0.0
+                            else:
+                                try:
+                                    value = float(fallback_val)
+                                except ValueError:
+                                    value = 0.0
+                                    
                         # Initialize Group
                         if label not in object_groups:
                             object_groups[label] = {

@@ -58,30 +58,72 @@ def get_summarized_context(db: Session) -> str:
                 objects = json.loads(diagram.objects) if diagram.objects else []
                 boq_data = json.loads(diagram.boq_data) if diagram.boq_data else []
                 
-                # Group Objects by Label for Richer Context instead of naive truncation
+                # Group Objects by Label for Richer Context and Financial Analytics
                 object_groups = {}
+                completed_value_by_month = {} # Format: {"2024-02": 500000000}
+                
                 for obj in objects:
                     if obj.get('type') in ['rectangle', 'circle']:
                         label = obj.get('label', 'Một phần công trình')
                         st = obj.get('status', 'not_started')
                         metadata = obj.get('metadata', {})
-                        completed_at = metadata.get('completedAt')
                         
+                        # Fallback for completion timestamp/date
+                        completed_at = metadata.get('completedAt') or obj.get('completionDate')
+                        
+                        # Calculate Value (Contract Amount or Qty * Price)
+                        value = obj.get('contractAmount') 
+                        if not value:
+                            qty = obj.get('designQty') or 0
+                            price = obj.get('unitPrice') or 0
+                            value = float(qty) * float(price)
+                        else:
+                            value = float(value)
+                            
+                        # Initialize Group
                         if label not in object_groups:
                             object_groups[label] = {
                                 "total_count": 0,
                                 "status_counts": {"not_started": 0, "in_progress": 0, "completed": 0, "planned": 0},
-                                "completion_timeline": [] # Chỉ lưu ngày hoàn thành của các item trong nhóm này
+                                "financial_summary": {
+                                    "total_value": 0,
+                                    "completed_value": 0,
+                                    "in_progress_value": 0,
+                                    "remaining_value": 0
+                                },
+                                "completion_timeline": [] 
                             }
                             
                         grp = object_groups[label]
                         grp["total_count"] += 1
+                        
                         if st in grp["status_counts"]:
                             grp["status_counts"][st] += 1
                         
+                        # Add value to financial summary
+                        grp["financial_summary"]["total_value"] += value
+                        if st == 'completed':
+                            grp["financial_summary"]["completed_value"] += value
+                        elif st == 'in_progress':
+                            grp["financial_summary"]["in_progress_value"] += value
+                        else:
+                            grp["financial_summary"]["remaining_value"] += value
+                        
+                        # Process Completion Timeline & Monthly Value
                         if st == 'completed' and completed_at:
-                            # Lưu lại một mốc thời gian hoàn thành (không cần lưu ID để tiết kiệm mem)
                             grp["completion_timeline"].append(completed_at)
+                            
+                            # Extract YYYY-MM for Monthly Aggregation
+                            try:
+                                # Convert ISO string or simple YYYY-MM-DD to YYYY-MM
+                                dt_obj = datetime.fromisoformat(completed_at.replace("Z", "+00:00"))
+                                month_key = dt_obj.strftime("%Y-%m")
+                            except Exception:
+                                month_key = str(completed_at)[:7] # fallback string slicing YYYY-MM
+                                
+                            if month_key not in completed_value_by_month:
+                                completed_value_by_month[month_key] = 0
+                            completed_value_by_month[month_key] += value
                 
                 # Truncate BOQ: Lấy Top 30 mục đắt nhất hoặc chỉ lấy tổng khối lượng
                 compact_boq = []
@@ -94,7 +136,8 @@ def get_summarized_context(db: Session) -> str:
                 
                 proj_dict["diagrams"].append({
                     "diagram_name": diagram.name,
-                    "component_groups_summary": object_groups, # Nhóm component thông minh
+                    "component_groups_summary": object_groups, 
+                    "completed_value_by_month": completed_value_by_month, # Dòng tiền hoàn thành theo tháng của Sơ đồ
                     "boq_sample_items": compact_boq
                 })
             except Exception as e:
@@ -130,8 +173,12 @@ def chat_with_project_data(
 
     # 2. Gọi Gemini API
     prompt = f"""Bạn là một trợ lý ảo phân tích dữ liệu Quản lý Dự án, nhiệm vụ của bạn là truy vấn thông tin TỔNG QUAN XUYÊN SUỐT các dự án của hệ thống để trả lời người dùng.
-Dưới đây là Cấu trúc Dữ liệu JSON chứa toàn bộ thông tin của TẤT CẢ các Dự Án (all_projects), mỗi dự án đi kèm với (diagrams) bao gồm Bảng khối lượng (boq) và Trạng thái thi công.
-Chú thích Trạng thái: 'completed' (đã xong), 'in_progress' (đang thi công), 'not_started' (chưa bắt đầu).
+Dưới đây là Cấu trúc Dữ liệu JSON chứa thông tin của TẤT CẢ các Dự Án (all_projects). Mỗi dự án sẽ đi kèm với Sơ đồ (diagrams), Bảng khối lượng (boq_sample_items) và Cấu trúc tóm tắt cấu kiện (component_groups_summary).
+Chú ý các chỉ số quan trọng: 'completed' (đã xong), 'in_progress' (đang thi công), 'not_started' (chưa bắt đầu).
+
+[ĐẶC BIỆT LƯU Ý VỀ TÀI CHÍNH / TIẾN ĐỘ THÁNG LÀM VIỆC]
+- Mỗi Cấu kiện (Group) đều có `financial_summary` chứa các trường Giá trị Tiền: `total_value` (Tổng giá trị), `completed_value` (Giá trị đã làm xong), `remaining_value` (Giá trị còn lại chưa làm). Đơn vị tiền tệ hiển thị tự nhiên (VNĐ).
+- Để biết tiến độ làm xong của tháng nào, hãy xem danh sách `completion_timeline` của từng Cấu kiện. Đặc biệt, hãy dùng mục `completed_value_by_month` (biểu đồ Dòng tiền Hoàn Thành Theo Tháng có Format Key là YYYY-MM) để tính toán nhanh TỔNG TIỀN KIẾM ĐƯỢC CỦA MỖI THÁNG trong dự án thay vì phải tự đếm thủ công.
 
 [DỮ LIỆU TỔNG HỢP TOÀN BỘ DỰ ÁN]
 {context_str}
@@ -140,7 +187,7 @@ Chú thích Trạng thái: 'completed' (đã xong), 'in_progress' (đang thi cô
 {request_data.message}
 
 Hãy Lắng nghe Yêu cầu để xem người dùng đang hỏi về DỰ ÁN NÀO, hay là hỏi CHUNG TẤT CẢ Dự án để đưa lời phân tích chính xác nhất. Hạn chế đoán mò.
-Trình bày rõ ràng, dễ hiểu, sử dụng tiếng Việt. Có dấu mác Markdown. Phân tích chi tiết số liệu trạng thái thi công.
+Trình bày rõ ràng, dễ hiểu, sử dụng tiếng Việt. Nếu người dùng hỏi về Số lượng, báo cáo Số Lượng. Nếu hỏi về Giá Trị (Tiền, Tổng mức), báo cáo Giá Trị và Tháng Hoàn Thành. Bạn có quyền tính tổng Giá trị của nhiều Nhóm Cấu Kiện lại với nhau để ra số Tổng cho Từng Sơ đồ.
 """
     try:
         genai.configure(api_key=active_key)

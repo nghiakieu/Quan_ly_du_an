@@ -1,7 +1,7 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
-from app.db.database import get_db
+from app.api.deps import get_db
 from app import models, schemas
 from app.api import deps
 from app.models.user import User
@@ -91,14 +91,15 @@ def get_project_progress(
         if diagram.boq_data:
             try:
                 boq = json.loads(diagram.boq_data)
-                if isinstance(boq, dict):
-                    for key, item in boq.items():
-                        if isinstance(item, dict) and 'status' in item:
-                            total += 1
-                            if item['status'] == 2:
-                                completed += 1
-                            elif item['status'] == 1:
-                                in_progress += 1
+                # Support both list and dict format for backward compatibility
+                items = boq if isinstance(boq, list) else (list(boq.values()) if isinstance(boq, dict) else [])
+                for item in items:
+                    if isinstance(item, dict) and 'status' in item:
+                        total += 1
+                        if item['status'] == 2:
+                            completed += 1
+                        elif item['status'] == 1:
+                            in_progress += 1
             except (json.JSONDecodeError, TypeError):
                 pass
     

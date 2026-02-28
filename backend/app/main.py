@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_date TIMESTAMPTZ",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL",
         "ALTER TABLE projects ADD COLUMN IF NOT EXISTS status VARCHAR DEFAULT 'planning'",
+        "ALTER TABLE diagrams ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()",
     ]
 
     try:

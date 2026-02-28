@@ -75,9 +75,16 @@ export default function AIChatBot() {
         setIsLoading(true);
 
         try {
+            // Build conversation history for multi-turn AI context
+            const recentHistory = messages
+                .filter(m => m.id !== 'welcome')
+                .slice(-6)
+                .map(m => ({ role: m.role, content: m.content }));
+
             const response = await api.post('/ai/chat', {
                 message: userText,
-                api_key: apiKey ? apiKey : undefined
+                api_key: apiKey ? apiKey : undefined,
+                history: recentHistory
             });
 
             const aiMsg: Message = {

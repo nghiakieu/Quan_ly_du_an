@@ -40,7 +40,7 @@ def test_token(current_user: User = Depends(deps.get_current_user)) -> Any:
     """
     return current_user
 
-# Initial setup helper (Warning: In production should be secured)
+# Initial setup helper - Only works when no admin exists
 @router.post("/setup-admin", response_model=UserSchema)
 def setup_initial_admin(
     *,
@@ -48,8 +48,16 @@ def setup_initial_admin(
     user_in: UserCreate
 ) -> Any:
     """
-    Create initial admin user.
+    Create initial admin user. Blocked if an admin already exists.
     """
+    # Security: Block if any admin already exists
+    existing_admin = db.query(User).filter(User.role == "admin").first()
+    if existing_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="Admin already exists. Use admin account to manage users."
+        )
+
     user = db.query(User).filter(User.username == user_in.username).first()
     if user:
         raise HTTPException(status_code=400, detail="Username already exists")

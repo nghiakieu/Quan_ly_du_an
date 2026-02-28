@@ -20,6 +20,20 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+// Handle 401 responses (expired/invalid token)
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401 && typeof window !== 'undefined') {
+            localStorage.removeItem('access_token');
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+        }
+        return Promise.reject(error);
+    }
+);
+
 // TypeScript interfaces
 export interface Block {
     id: number;

@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session
 import asyncio
 
-from app.db.database import get_db, engine
+from app.api.deps import get_db
+from app.api.api_v1.endpoints.ai import invalidate_ai_cache
 from app.models.diagram import Diagram as DiagramModel
 from app.schemas.diagram import Diagram, DiagramCreate, DiagramUpdate
 from app.models import diagram as models
@@ -11,8 +12,6 @@ from app.api import deps
 from app.models.user import User
 from app.api.ws_manager import manager
 
-# Create tables if not exist (quick setup for dev)
-models.Base.metadata.create_all(bind=engine)
 
 router = APIRouter()
 
@@ -62,6 +61,7 @@ def create_diagram(
         diagram_id="all", 
         message={"event": "new_diagram", "data": {"id": diagram.id}}
     )
+    invalidate_ai_cache()
     return diagram
 
 @router.put("/{diagram_id}", response_model=Diagram)
@@ -87,6 +87,7 @@ def update_diagram(
     db.add(diagram)
     db.commit()
     db.refresh(diagram)
+    invalidate_ai_cache()
     
     # Phát tín hiệu báo sơ đồ có thay đổi
     background_tasks.add_task(

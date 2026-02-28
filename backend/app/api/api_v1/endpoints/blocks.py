@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import List, Any, Dict
 
-from app.db.database import get_db, engine
+from app.api.deps import get_db
 from app.models.block import Block as BlockModel
 from app.schemas.block import Block
 from app.services.excel_service import ExcelService
@@ -10,8 +10,6 @@ from app.models import block as models
 from app.api import deps
 from app.models.user import User
 
-# Create tables if not exist (quick setup for dev)
-models.Base.metadata.create_all(bind=engine)
 
 router = APIRouter()
 
@@ -57,7 +55,7 @@ async def upload_excel(
 @router.delete("/")
 def clear_data(
     db: Session = Depends(get_db),
-    current_user: User = Depends(deps.get_current_active_user)
+    current_user: User = Depends(deps.get_current_active_admin)
 ) -> Any:
     """
     Clear all data (Dev only).

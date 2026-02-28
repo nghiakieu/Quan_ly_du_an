@@ -5,11 +5,8 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Quan Ly Du An API"
     API_V1_STR: str = "/api/v1"
     
-    # CORS Configuration - Whitelist allowed origins
-    BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:3001",
-    ]
+    # CORS Configuration - Allow all for cloud deployment OR override via .env
+    BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
     # Database
     SQLALCHEMY_DATABASE_URI: str = "sqlite:///./sql_app.db"

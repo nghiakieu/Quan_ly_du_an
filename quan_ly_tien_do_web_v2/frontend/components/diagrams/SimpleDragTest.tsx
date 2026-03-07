@@ -7,6 +7,9 @@ import StatusPieChart from './StatusPieChart';
 import ProgressDashboard from './ProgressDashboard';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth';
+import { syncDiagramBOQ } from '@/lib/api';
+import BOQSyncReport from '../BOQSyncReport';
+import { toast } from 'sonner';
 
 /** Segment for progressType 'segments' (e.g. trụ thi công theo đợt) */
 export interface BoxObjectSegment {
@@ -46,7 +49,7 @@ interface BoxObject {
     segments?: BoxObjectSegment[]; // Đợt thi công (trụ ít đợt)
 }
 
-import BOQUploader, { BOQItem } from './BOQUploader';
+import { BOQItem } from './BOQUploader';
 
 /** Resolve effective status and progress % from BoxObject (percentage / segments / none). */
 function resolveBoxProgress(obj: BoxObject): { status: 'not_started' | 'in_progress' | 'completed' | 'planned'; progressPct: number } {
@@ -148,6 +151,13 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     // Viewport state (Zoom & Pan)
     const [viewState, setViewState] = useState({ scale: 1, x: 0, y: 0 });
     const svgRef = React.useRef<SVGSVGElement>(null);
+
+    // BOQ Sync State
+    const boqFileInputRef = React.useRef<HTMLInputElement>(null);
+    const [isSyncingBOQ, setIsSyncingBOQ] = useState(false);
+    const [syncReport, setSyncReport] = useState<any>(null);
+    const [showSyncReport, setShowSyncReport] = useState(false);
+
     const panState = React.useRef({ isPanning: false, startX: 0, startY: 0, viewStartX: 0, viewStartY: 0 });
     const lastMiddleClickTime = React.useRef(0);
 
@@ -915,19 +925,40 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const [boqData, setBoqData] = useState<BOQItem[]>([]);
     const [showBOQModal, setShowBOQModal] = useState(false);
     const [showAssignmentModal, setShowAssignmentModal] = useState(false);
-
-    const handleBOQLoaded = (data: BOQItem[]) => {
-        if (boqData.length > 0) {
-            if (!window.confirm('Bạn có chắc muốn thay thế hoàn toàn bảng BOQ hiện tại bằng dữ liệu mới? hành động này không thể hoàn tác.')) {
-                return;
-            }
+    const handleBOQSyncUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !propDiagramId || !projectId) {
+            if (e.target) e.target.value = '';
+            return;
         }
-        setBoqData(data);
-        alert(`Loaded ${data.length} BOQ items successfully!`);
+
+        try {
+            setIsSyncingBOQ(true);
+            toast.info('Đang đồng bộ BOQ và gán cho các block...');
+            const res = await syncDiagramBOQ(projectId, propDiagramId, file);
+
+            if (res.status === 'success') {
+                setSyncReport({
+                    boq_count: res.boq_count,
+                    blocks_synced: res.blocks_synced,
+                    sync_report: res.sync_report,
+                    boq_warnings: res.boq_warnings
+                });
+                setShowSyncReport(true);
+                toast.success('Đồng bộ BOQ thành công!');
+                // Fetch data again to refresh objects state from backend
+                fetchDiagramData();
+            }
+        } catch (error: any) {
+            console.error('BOQ Sync Error:', error);
+            const msg = error.response?.data?.detail || 'Lỗi khi đồng bộ BOQ';
+            toast.error(msg);
+            alert(msg);
+        } finally {
+            setIsSyncingBOQ(false);
+            if (e.target) e.target.value = '';
+        }
     };
-
-
-
     // Auto-calculate BOQ values based on object status
     // ... (keep useEffect as is) ...
 
@@ -936,7 +967,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
 
         // 1. Prepare Data
         const header = [
-            'ID', 'TT', 'Nội dung công việc', 'ĐVT',
+            'Mã hiệu', 'TT', 'Nội dung công việc', 'ĐVT',
             'KL Thiết kế', 'KL Thực hiện', 'KL Kế hoạch',
             'Đơn giá', 'Giá trị Hợp đồng', 'GT Thực hiện', 'GT Kế hoạch'
         ];
@@ -1402,7 +1433,31 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                 <div className="p-3">
                     {/* Top Actions Row */}
                     <div className="grid grid-cols-2 gap-2 mb-3">
-                        {isAuthenticated && <BOQUploader onDataLoaded={handleBOQLoaded} />}
+                        {isAuthenticated && (
+                            <div>
+                                <input
+                                    type="file"
+                                    ref={boqFileInputRef}
+                                    onChange={handleBOQSyncUpload}
+                                    accept=".xls,.xlsx"
+                                    className="hidden"
+                                />
+                                <button
+                                    onClick={() => boqFileInputRef.current?.click()}
+                                    disabled={isSyncingBOQ}
+                                    className="w-full px-3 py-1.5 text-xs bg-green-600 text-white rounded hover:bg-green-700 font-semibold flex items-center justify-center gap-1 shadow-sm transition-colors disabled:opacity-50"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                                        <line x1="3" y1="9" x2="21" y2="9"></line>
+                                        <line x1="3" y1="15" x2="21" y2="15"></line>
+                                        <line x1="9" y1="3" x2="9" y2="21"></line>
+                                        <line x1="15" y1="3" x2="15" y2="21"></line>
+                                    </svg>
+                                    {isSyncingBOQ ? 'Đang tải...' : 'Update BOQ'}
+                                </button>
+                            </div>
+                        )}
                         {boqData.length > 0 && (
                             <button
                                 onClick={() => setShowBOQModal(true)}
@@ -1490,8 +1545,8 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                     <table className="w-full text-xs border-collapse border border-gray-300">
                                         <thead className="bg-gray-100 text-gray-700 sticky top-0 z-20 shadow-sm">
                                             <tr>
-                                                <th className="border p-2 bg-gray-100">ID</th>
-                                                <th className="border p-2 bg-gray-100">TT</th>
+                                                <th className="border p-2 bg-gray-100 text-left w-24">Mã hiệu</th>
+                                                <th className="border p-2 bg-gray-100 text-center w-12">TT</th>
                                                 <th className="border p-2 bg-gray-100">Nội dung công việc</th>
                                                 <th className="border p-2 bg-gray-100">ĐVT</th>
                                                 <th className="border p-2 bg-gray-100">KL Tkế</th>
@@ -1506,8 +1561,8 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                         <tbody>
                                             {boqData.map((item, index) => (
                                                 <tr key={index} className="hover:bg-gray-50">
-                                                    <td className="border p-1 font-mono">{item.id}</td>
-                                                    <td className="border p-1 text-center">{item.order}</td>
+                                                    <td className="border p-1 font-mono text-gray-500">{item.id}</td>
+                                                    <td className="border p-1 text-center font-semibold text-gray-600">{item.order}</td>
                                                     <td className="border p-1">{item.name}</td>
                                                     <td className="border p-1 text-center">{item.unit}</td>
                                                     <td className="border p-1 text-right">
@@ -2273,6 +2328,12 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     />
                 )
             }
+
+            <BOQSyncReport
+                isOpen={showSyncReport}
+                onClose={() => setShowSyncReport(false)}
+                reportData={syncReport}
+            />
         </div >
     );
 }

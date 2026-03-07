@@ -202,6 +202,42 @@ export const deleteProject = async (id: number | string): Promise<{ message: str
     return response.data;
 };
 
+// --- BOQ API ---
+export const getProjectBOQ = async (projectId: number | string): Promise<{ project_id: number, boq_data: any[], count: number }> => {
+    const response = await api.get(`/projects/${projectId}/boq`);
+    return response.data;
+};
+
+export const uploadProjectBOQ = async (projectId: number | string, file: File): Promise<UploadResponse & { count: number, data: any[], total_contract: number }> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post(`/projects/${projectId}/boq/upload`, formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    return response.data;
+};
+
+export const syncDiagramBOQ = async (projectId: number | string, diagramId: number | string, file: File): Promise<{
+    status: string,
+    boq_count: number,
+    blocks_synced: number,
+    sync_report: any,
+    boq_warnings: string[],
+    data: any[]
+}> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post(`/projects/${projectId}/diagrams/${diagramId}/boq/sync`, formData, {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        },
+    });
+    return response.data;
+};
+
+
 // --- DIAGRAMS API ---
 export const getDiagrams = async (projectId?: number): Promise<Diagram[]> => {
     const params = projectId ? { project_id: projectId } : {};

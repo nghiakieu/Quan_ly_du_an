@@ -12,9 +12,11 @@ import KanbanBoard from '@/components/KanbanBoard';
 import GanttChart from '@/components/GanttChart';
 import BOQSummary from '@/components/BOQSummary';
 import ProjectReport from '@/components/ProjectReport';
+import ProjectBOQUpload from '@/components/ProjectBOQUpload';
+import ProjectBOQViewer from '@/components/ProjectBOQViewer';
 import PresenceCursors from '@/components/PresenceCursors';
 import DiagramOverviewCard from '@/components/diagrams/DiagramOverviewCard';
-import { ArrowLeft, Plus, FileText, Trash2, Eye, Building2, Banknote, Clock, ChevronRight, ChevronDown, ListTodo, CalendarDays, Calculator, Users } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Trash2, Eye, Building2, Banknote, Clock, ChevronRight, ChevronDown, ListTodo, CalendarDays, Calculator, Users, Upload } from 'lucide-react';
 
 const CollapsibleSection = ({ title, defaultOpen = false, children, icon: Icon }: any) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -44,6 +46,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     const searchParams = useSearchParams();
     const [project, setProject] = useState<Project | null>(null);
     const [progress, setProgress] = useState<ProjectProgress | null>(null);
+    const [isBOQUploadOpen, setIsBOQUploadOpen] = useState(false);
+    const [isBOQViewerOpen, setIsBOQViewerOpen] = useState(false);
     const [activeDiagramId, setActiveDiagramId] = useState<number | null>(() => {
         const diagramParam = searchParams.get('diagram');
         return diagramParam ? parseInt(diagramParam) : null;
@@ -201,7 +205,27 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                     <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
                     <span className="text-gray-900 font-medium">{project.name}</span>
                 </div>
-                <ProjectReport projectId={projectId} />
+                <div className="flex flex-wrap items-center gap-2">
+                    {isAuthenticated && (
+                        <>
+                            <button
+                                onClick={() => setIsBOQUploadOpen(true)}
+                                className="px-3 py-2 bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100 transition-colors font-medium flex items-center gap-1.5 text-sm"
+                            >
+                                <Upload className="h-4 w-4" />
+                                <span className="hidden sm:inline">Update BOQ</span>
+                            </button>
+                            <button
+                                onClick={() => setIsBOQViewerOpen(true)}
+                                className="px-3 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors font-medium flex items-center gap-1.5 text-sm"
+                            >
+                                <ListTodo className="h-4 w-4" />
+                                <span className="hidden sm:inline">Xem BOQ</span>
+                            </button>
+                        </>
+                    )}
+                    <ProjectReport projectId={projectId} />
+                </div>
             </div>
 
             {/* Project Info Header */}
@@ -374,6 +398,21 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                     ))}
                 </div>
             )}
+
+            <ProjectBOQUpload
+                projectId={parseInt(projectId, 10)}
+                isOpen={isBOQUploadOpen}
+                onClose={() => setIsBOQUploadOpen(false)}
+                onSuccess={() => {
+                    setIsBOQUploadOpen(false);
+                    fetchProjectDetail();
+                }}
+            />
+            <ProjectBOQViewer
+                projectId={parseInt(projectId, 10)}
+                isOpen={isBOQViewerOpen}
+                onClose={() => setIsBOQViewerOpen(false)}
+            />
         </div>
     );
 }

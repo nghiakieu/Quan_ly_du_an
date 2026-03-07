@@ -19,6 +19,7 @@ class Project(Base):
     # Manager ID (linked to user)
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     status = Column(String, default="planning") # planning, active, on_hold, completed
+    boq_data = Column(Text, nullable=True)       # JSON string of master BOQ data
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

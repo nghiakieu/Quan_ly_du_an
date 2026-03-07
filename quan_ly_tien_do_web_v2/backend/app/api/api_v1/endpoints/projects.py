@@ -1,5 +1,5 @@
 from typing import Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_db
@@ -7,6 +7,8 @@ from app import models, schemas
 from app.api import deps
 from app.models.user import User
 from app.api.api_v1.endpoints.ai import invalidate_ai_cache
+import json
+import io
 
 router = APIRouter()
 
@@ -341,4 +343,375 @@ def get_project_boq_summary(
             "variance": total_actual - total_design,
             "items_count": len(items),
         }
+    }
+
+
+# ============================================================
+# BOQ Management Endpoints
+# ============================================================
+
+@router.get("/{project_id}/boq")
+def get_project_boq(
+    *,
+    db: Session = Depends(get_db),
+    project_id: int,
+):
+    """
+    Get project-level master BOQ data and aggregate actual/plan quantities from diagrams.
+    """
+    from sqlalchemy.orm import joinedload
+    import json
+    
+    project = db.query(models.Project).options(
+        joinedload(models.Project.diagrams)
+    ).filter(models.Project.id == project_id).first()
+    
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    boq = []
+    if project.boq_data:
+        try:
+            boq = json.loads(project.boq_data)
+        except (json.JSONDecodeError, TypeError):
+            boq = []
+            
+    # Normalize ID to handle pandas parsing differences (e.g. "1.0" vs "1")
+    def normalize_id(item_id):
+        s = str(item_id).strip()
+        if s.endswith('.0'):
+            return s[:-2]
+        return s
+        
+    boq_map = {normalize_id(item.get('id', '')): item for item in boq}
+    
+    for diagram in project.diagrams:
+        if not diagram.boq_data:
+            continue
+        try:
+            diag_boq = json.loads(diagram.boq_data)
+            if not isinstance(diag_boq, list):
+                continue
+            for item in diag_boq:
+                item_id = normalize_id(item.get('id', ''))
+                if item_id in boq_map:
+                    base_item = boq_map[item_id]
+                    base_item['actualQty'] = base_item.get('actualQty', 0) + (item.get('actualQty') or 0)
+                    base_item['planQty'] = base_item.get('planQty', 0) + (item.get('planQty') or 0)
+        except (json.JSONDecodeError, TypeError):
+            pass
+            
+    # Recalculate amounts
+    for item in boq:
+        price = item.get('unitPrice') or 0
+        item['actualAmount'] = (item.get('actualQty', 0) or 0) * price
+        item['planAmount'] = (item.get('planQty', 0) or 0) * price
+    
+    return {"project_id": project_id, "boq_data": boq, "count": len(boq)}
+
+
+@router.post("/{project_id}/boq/upload")
+async def upload_project_boq(
+    *,
+    db: Session = Depends(get_db),
+    project_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    """
+    Upload Excel file to set project-level master BOQ.
+    Expected columns: TT | Noi dung | DVT | KL Tke | Don gia
+    """
+    import pandas as pd
+    
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Invalid file format. Please upload Excel file.")
+    
+    content = await file.read()
+    try:
+        df = pd.read_excel(io.BytesIO(content), header=0)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot read Excel file: {str(e)}")
+    
+    # Normalize column names for flexible matching
+    col_map = {}
+    for i, col in enumerate(df.columns):
+        col_lower = str(col).strip().lower()
+        if 'mã' in col_lower or 'ma ' in col_lower or 'id' == col_lower or 'code' in col_lower:
+            col_map['id'] = col
+        elif 'tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower:
+            col_map['tt'] = col
+        elif 'noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower or 'cong viec' in col_lower:
+            col_map['name'] = col
+        elif 'dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower or 'đơn vị' in col_lower:
+            col_map['unit'] = col
+        elif ('kl' in col_lower and ('tk' in col_lower or 'thiết kế' in col_lower or 'tke' in col_lower)) or 'design' in col_lower:
+            col_map['designQty'] = col
+        elif 'don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower:
+            col_map['unitPrice'] = col
+            
+    if 'id' not in col_map and 'tt' in col_map:
+        # Fallback to TT if no explicit ID column found
+        col_map['id'] = col_map['tt']
+    if 'id' not in col_map and len(df.columns) > 1:
+        col_map['id'] = df.columns[0]
+    if 'tt' not in col_map and len(df.columns) > 1:
+        col_map['tt'] = df.columns[0]
+    
+    if 'name' not in col_map:
+        raise HTTPException(status_code=400, detail="Cannot find 'Nội dung công việc' column in Excel file.")
+    
+    boq_items = []
+    for _, row in df.iterrows():
+        name_val = row.get(col_map.get('name', ''), '')
+        if pd.isna(name_val) or str(name_val).strip() == '':
+            continue
+        
+        item_id = str(row.get(col_map.get('id', ''), '')).strip()
+        if item_id.endswith('.0'): item_id = item_id[:-2]
+        if pd.isna(item_id) or item_id in ('', 'nan'):
+            item_id = str(len(boq_items) + 1)
+            
+        tt_val = str(row.get(col_map.get('tt', ''), '')).strip()
+        if tt_val.endswith('.0'): tt_val = tt_val[:-2]
+        if pd.isna(tt_val) or tt_val in ('', 'nan'):
+            tt_val = str(len(boq_items) + 1)
+        
+        def safe_float(val):
+            try:
+                if pd.isna(val): return 0
+                return float(val)
+            except (ValueError, TypeError):
+                return 0
+        
+        design_qty = safe_float(row.get(col_map.get('designQty', ''), 0))
+        unit_price = safe_float(row.get(col_map.get('unitPrice', ''), 0))
+        
+        boq_items.append({
+            "id": item_id,
+            "order": tt_val,
+            "name": str(name_val).strip(),
+            "unit": str(row.get(col_map.get('unit', ''), '')).strip() if not pd.isna(row.get(col_map.get('unit', ''), '')) else '',
+            "designQty": design_qty,
+            "unitPrice": unit_price,
+            "contractAmount": round(design_qty * unit_price, 2),
+        })
+    
+    # Save to project
+    project.boq_data = json.dumps(boq_items, ensure_ascii=False)
+    db.commit()
+    
+    invalidate_ai_cache()
+    
+    return {
+        "status": "success",
+        "count": len(boq_items),
+        "total_contract": round(sum(i["contractAmount"] for i in boq_items), 0),
+        "data": boq_items,
+    }
+
+
+@router.post("/{project_id}/diagrams/{diagram_id}/boq/sync")
+async def sync_diagram_boq(
+    *,
+    db: Session = Depends(get_db),
+    project_id: int,
+    diagram_id: int,
+    file: UploadFile = File(...),
+    current_user: User = Depends(deps.get_current_active_user),
+):
+    """
+    Upload Excel with block columns to sync diagram BOQ and auto-assign to blocks.
+    Expected format: TT | Name | DVT | KL Tke | Don gia | BLOCK-ID-1 | BLOCK-ID-2 | ...
+    First row headers of block columns must match object IDs on the diagram.
+    """
+    import pandas as pd
+    
+    # Validate project and diagram
+    project = db.query(models.Project).filter(models.Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    diagram = db.query(models.Diagram).filter(
+        models.Diagram.id == diagram_id,
+        models.Diagram.project_id == project_id
+    ).first()
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagram not found in this project")
+    
+    if not file.filename.endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Invalid file format.")
+    
+    content = await file.read()
+    try:
+        df = pd.read_excel(io.BytesIO(content), header=0)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Cannot read Excel: {str(e)}")
+    
+    # Load project master BOQ for validation
+    master_boq_ids = set()
+    if project.boq_data:
+        try:
+            master_boq = json.loads(project.boq_data)
+            master_boq_ids = {str(item.get('id', '')) for item in master_boq if isinstance(item, dict)}
+        except (json.JSONDecodeError, TypeError):
+            pass
+    
+    # Parse standard columns (first 5) and block columns (from column 6+)
+    col_map = {}
+    block_columns = {}  # {block_id: column_name}
+    
+    for i, col in enumerate(df.columns):
+        col_str = str(col).strip()
+        col_lower = col_str.lower()
+        if i <= 4 and ('mã' in col_lower or 'ma ' in col_lower or 'id' == col_lower or 'code' in col_lower):
+            col_map['id'] = col
+        elif i <= 4 and ('tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower):
+            col_map['tt'] = col
+        elif i <= 4 and ('noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower):
+            col_map['name'] = col
+        elif i <= 4 and ('dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower):
+            col_map['unit'] = col
+        elif i <= 4 and (('kl' in col_lower and ('tk' in col_lower or 'tke' in col_lower)) or 'design' in col_lower):
+            col_map['designQty'] = col
+        elif i <= 4 and ('don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower):
+            col_map['unitPrice'] = col
+        elif i >= 5:
+            # Block ID columns start from column 6 (index 5)
+            block_columns[col_str] = col
+            
+    if 'id' not in col_map and 'tt' in col_map:
+        col_map['id'] = col_map['tt']
+    if 'id' not in col_map and len(df.columns) > 1:
+        col_map['id'] = df.columns[0]
+    if 'tt' not in col_map and len(df.columns) > 1:
+        col_map['tt'] = df.columns[0]
+    
+    if 'name' not in col_map:
+        raise HTTPException(status_code=400, detail="Cannot find 'Nội dung công việc' column.")
+    
+    # Load existing diagram objects
+    objects_list = []
+    if diagram.objects:
+        try:
+            objects_list = json.loads(diagram.objects)
+        except (json.JSONDecodeError, TypeError):
+            objects_list = []
+    
+    diagram_block_ids = {str(obj.get('id', '')) for obj in objects_list if isinstance(obj, dict)}
+    excel_block_ids = set(block_columns.keys())
+    
+    def safe_float(val):
+        try:
+            if pd.isna(val): return 0
+            return float(val)
+        except (ValueError, TypeError):
+            return 0
+    
+    # Parse BOQ rows
+    boq_items = []
+    block_boq_map = {bid: {} for bid in excel_block_ids}  # {block_id: {boq_id: qty}}
+    
+    for _, row in df.iterrows():
+        name_val = row.get(col_map.get('name', ''), '')
+        if pd.isna(name_val) or str(name_val).strip() == '':
+            continue
+        
+        item_id = str(row.get(col_map.get('id', ''), '')).strip()
+        if item_id.endswith('.0'): item_id = item_id[:-2]
+        if pd.isna(item_id) or item_id in ('', 'nan'):
+            item_id = str(len(boq_items) + 1)
+            
+        tt_val = str(row.get(col_map.get('tt', ''), '')).strip()
+        if tt_val.endswith('.0'): tt_val = tt_val[:-2]
+        if pd.isna(tt_val) or tt_val in ('', 'nan'):
+            tt_val = str(len(boq_items) + 1)
+        
+        design_qty = safe_float(row.get(col_map.get('designQty', ''), 0))
+        unit_price = safe_float(row.get(col_map.get('unitPrice', ''), 0))
+        unit_val = row.get(col_map.get('unit', ''), '')
+        
+        boq_item = {
+            "id": item_id,
+            "order": tt_val,
+            "name": str(name_val).strip(),
+            "unit": str(unit_val).strip() if not pd.isna(unit_val) else '',
+            "designQty": design_qty,
+            "unitPrice": unit_price,
+            "contractAmount": round(design_qty * unit_price, 2),
+            "actualQty": 0,
+            "actualAmount": 0,
+            "planQty": 0,
+            "planAmount": 0,
+        }
+        
+        # Calculate actual quantities per block column
+        has_any_block_qty = False
+        for bid, col_name in block_columns.items():
+            qty = safe_float(row.get(col_name, 0))
+            if qty > 0:
+                block_boq_map[bid][item_id] = qty
+                boq_item["actualQty"] += qty
+                has_any_block_qty = True
+        
+        boq_item["actualAmount"] = round(boq_item["actualQty"] * unit_price, 2)
+        boq_items.append(boq_item)
+    
+    # Update diagram.boq_data
+    diagram.boq_data = json.dumps(boq_items, ensure_ascii=False)
+    
+    # Update objects with boqIds mapping
+    for obj in objects_list:
+        obj_id = str(obj.get('id', ''))
+        if obj_id in block_boq_map and block_boq_map[obj_id]:
+            obj['boqIds'] = block_boq_map[obj_id]
+    
+    diagram.objects = json.dumps(objects_list, ensure_ascii=False)
+    db.commit()
+    
+    invalidate_ai_cache()
+    
+    # Generate Sync Report
+    sync_report = {
+        "matched": [],       # Block IDs successfully mapped
+        "excel_only": [],    # Block IDs in Excel but not on diagram
+        "diagram_only": [],  # Block IDs on diagram but not in Excel
+        "empty": [],         # Block IDs in Excel with no quantities
+    }
+    
+    for bid in excel_block_ids:
+        if bid in diagram_block_ids:
+            if block_boq_map.get(bid):
+                sync_report["matched"].append({
+                    "block_id": bid,
+                    "items_count": len(block_boq_map[bid]),
+                    "total_qty": round(sum(block_boq_map[bid].values()), 2),
+                })
+            else:
+                sync_report["empty"].append(bid)
+        else:
+            sync_report["excel_only"].append(bid)
+    
+    for bid in diagram_block_ids:
+        if bid not in excel_block_ids:
+            sync_report["diagram_only"].append(bid)
+    
+    # Validation warning if master BOQ exists
+    boq_warnings = []
+    if master_boq_ids:
+        for item in boq_items:
+            if str(item['id']) not in master_boq_ids:
+                boq_warnings.append(f"BOQ item '{item['id']}: {item['name']}' not found in project master BOQ")
+    
+    return {
+        "status": "success",
+        "boq_count": len(boq_items),
+        "blocks_synced": len(sync_report["matched"]),
+        "sync_report": sync_report,
+        "boq_warnings": boq_warnings,
+        "data": boq_items,
     }

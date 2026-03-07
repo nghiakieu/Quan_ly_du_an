@@ -561,27 +561,27 @@ async def sync_diagram_boq(
         except (json.JSONDecodeError, TypeError):
             pass
     
-    # Parse standard columns (first 5) and block columns (from column 6+)
+    # Parse standard columns (first 11) and block columns (from column 12+)
     col_map = {}
     block_columns = {}  # {block_id: column_name}
     
     for i, col in enumerate(df.columns):
         col_str = str(col).strip()
         col_lower = col_str.lower()
-        if i <= 4 and ('mã' in col_lower or 'ma ' in col_lower or 'id' == col_lower or 'code' in col_lower):
+        if i <= 10 and ('mã' in col_lower or 'ma ' in col_lower or 'id' == col_lower or 'code' in col_lower):
             col_map['id'] = col
-        elif i <= 4 and ('tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower):
+        elif i <= 10 and ('tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower):
             col_map['tt'] = col
-        elif i <= 4 and ('noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower):
+        elif i <= 10 and ('noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower):
             col_map['name'] = col
-        elif i <= 4 and ('dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower):
+        elif i <= 10 and ('dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower):
             col_map['unit'] = col
-        elif i <= 4 and (('kl' in col_lower and ('tk' in col_lower or 'tke' in col_lower)) or 'design' in col_lower):
+        elif i <= 10 and (('kl' in col_lower and ('tk' in col_lower or 'tke' in col_lower)) or 'design' in col_lower):
             col_map['designQty'] = col
-        elif i <= 4 and ('don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower):
+        elif i <= 10 and ('don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower):
             col_map['unitPrice'] = col
-        elif i >= 5:
-            # Block ID columns start from column 6 (index 5)
+        elif i >= 11:
+            # Block ID columns start from column 12 (index 11)
             block_columns[col_str] = col
             
     if 'id' not in col_map and 'tt' in col_map:

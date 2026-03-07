@@ -484,6 +484,8 @@ async def upload_project_boq(
         def safe_float(val):
             try:
                 if pd.isna(val): return 0
+                if isinstance(val, str):
+                    val = val.replace(',', '').replace(' ', '')
                 return float(val)
             except (ValueError, TypeError):
                 return 0
@@ -572,11 +574,11 @@ async def sync_diagram_boq(
             col_map['id'] = col
         elif i <= 10 and ('tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower):
             col_map['tt'] = col
-        elif i <= 10 and ('noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower):
+        elif i <= 10 and ('noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower or 'cong viec' in col_lower):
             col_map['name'] = col
-        elif i <= 10 and ('dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower):
+        elif i <= 10 and ('dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower or 'đơn vị' in col_lower):
             col_map['unit'] = col
-        elif i <= 10 and (('kl' in col_lower and ('tk' in col_lower or 'tke' in col_lower)) or 'design' in col_lower):
+        elif i <= 10 and (('kl' in col_lower and ('tk' in col_lower or 'thiết kế' in col_lower or 'tke' in col_lower)) or 'design' in col_lower):
             col_map['designQty'] = col
         elif i <= 10 and ('don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower):
             col_map['unitPrice'] = col
@@ -608,6 +610,8 @@ async def sync_diagram_boq(
     def safe_float(val):
         try:
             if pd.isna(val): return 0
+            if isinstance(val, str):
+                val = val.replace(',', '').replace(' ', '')
             return float(val)
         except (ValueError, TypeError):
             return 0

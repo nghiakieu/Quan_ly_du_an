@@ -2152,42 +2152,40 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
 
                         {/* Objects Layer - Y-inverted as before */}
                         <g transform="translate(0, 900) scale(1, -1)">
-                            {objects.map(obj => (
-                                {(() => {
-                                    const { status: effectiveStatus, progressPct } = resolveBoxProgress(obj);
-                                    return (
-                                        <DraggableBox
-                                            key={obj.id}
-                                            id={obj.id}
-                                            x={obj.x}
-                                            y={obj.y}
-                                            label={obj.label}
-                                            color={obj.color}
-                                            type={obj.type}
-                                            width={obj.width}
-                                            height={obj.height}
-                                            diameter={obj.diameter}
-                                            text={obj.text}
-                                            fontSize={obj.fontSize}
-                                            fontFamily={obj.fontFamily}
-                                            fontColor={obj.fontColor}
-                                            fontWeight={obj.fontWeight}
-                                            fontStyle={obj.fontStyle}
-                                            status={effectiveStatus}
-                                            progressPct={progressPct}
-                                            progressType={obj.progressType}
-                                            unit={obj.unit}
-                                            totalQuantity={obj.totalQuantity}
-                                            actualQuantity={obj.actualQuantity}
-                                            isSelected={selectedIds.has(obj.id)}
-                                            onMouseDown={(e) => handleBoxMouseDown(e, obj.id)}
-                                            onDrag={handleDrag}
-                                            onDoubleClick={(e) => handleBoxDoubleClick(e, obj.id)}
-                                            scale={viewState.scale}
-                                        />
-                                    );
-                                })()}
-                            ))}
+                            {objects.map(obj => {
+                                const { status: effectiveStatus, progressPct } = resolveBoxProgress(obj);
+                                return (
+                                    <DraggableBox
+                                        key={obj.id}
+                                        id={obj.id}
+                                        x={obj.x}
+                                        y={obj.y}
+                                        label={obj.label}
+                                        color={obj.color}
+                                        type={obj.type}
+                                        width={obj.width}
+                                        height={obj.height}
+                                        diameter={obj.diameter}
+                                        text={obj.text}
+                                        fontSize={obj.fontSize}
+                                        fontFamily={obj.fontFamily}
+                                        fontColor={obj.fontColor}
+                                        fontWeight={obj.fontWeight}
+                                        fontStyle={obj.fontStyle}
+                                        status={effectiveStatus}
+                                        progressPct={progressPct}
+                                        progressType={obj.progressType}
+                                        unit={obj.unit}
+                                        totalQuantity={obj.totalQuantity}
+                                        actualQuantity={obj.actualQuantity}
+                                        isSelected={selectedIds.has(obj.id)}
+                                        onMouseDown={(e) => handleBoxMouseDown(e, obj.id)}
+                                        onDrag={handleDrag}
+                                        onDoubleClick={(e) => handleBoxDoubleClick(e, obj.id)}
+                                        scale={viewState.scale}
+                                    />
+                                );
+                            })}
                         </g>
 
                         {/* Selection Box Overlay (REMOVED DUPLICATE) */}

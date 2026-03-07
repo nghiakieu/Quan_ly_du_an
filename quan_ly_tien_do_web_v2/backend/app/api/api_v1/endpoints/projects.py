@@ -578,6 +578,18 @@ async def sync_diagram_boq(
     diagram_block_ids = {str(obj.get('id', '')) for obj in objects_list if isinstance(obj, dict)}
     excel_block_ids = set(block_columns.keys())
     
+    # Prefix Match Mapping Logic
+    excel_to_diagram_blocks = {} # {excel_col: [matching_diagram_block_ids]}
+    for bid in excel_block_ids:
+        matched = []
+        if bid in diagram_block_ids:
+            matched = [bid]
+        else:
+            for d_bid in diagram_block_ids:
+                if d_bid.startswith(bid):
+                    matched.append(d_bid)
+        excel_to_diagram_blocks[bid] = matched
+    
     def safe_float(val):
         try:
             if pd.isna(val): return 0
@@ -589,7 +601,9 @@ async def sync_diagram_boq(
     
     # Parse BOQ rows
     boq_items = []
-    block_boq_map = {bid: {} for bid in excel_block_ids}  # {block_id: {boq_id: qty}}
+    # Now keyed by diagram blocks since we distribute to them
+    block_boq_map = {bid: {} for bid in diagram_block_ids}  
+    excel_has_quantities = set()  # Track which excel columns actually had quantities
     
     for _, row in df.iterrows():
         name_val = row.get(col_map.get('name', ''), '')
@@ -626,12 +640,19 @@ async def sync_diagram_boq(
         
         # Calculate actual quantities per block column
         has_any_block_qty = False
-        for bid, col_name in block_columns.items():
+        for ex_bid, col_name in block_columns.items():
             qty = safe_float(row.get(col_name, 0))
             if qty > 0:
-                block_boq_map[bid][item_id] = qty
-                boq_item["actualQty"] += qty
-                has_any_block_qty = True
+                excel_has_quantities.add(ex_bid)
+                matched_diagram_blocks = excel_to_diagram_blocks.get(ex_bid, [])
+                if matched_diagram_blocks:
+                    # Distribute evenly
+                    qty_per_block = round(qty / len(matched_diagram_blocks), 4)
+                    for d_bid in matched_diagram_blocks:
+                        block_boq_map[d_bid][item_id] = qty_per_block
+                    
+                    boq_item["actualQty"] += qty
+                    has_any_block_qty = True
         
         boq_item["actualAmount"] = round(boq_item["actualQty"] * unit_price, 2)
         boq_items.append(boq_item)
@@ -658,21 +679,32 @@ async def sync_diagram_boq(
         "empty": [],         # Block IDs in Excel with no quantities
     }
     
-    for bid in excel_block_ids:
-        if bid in diagram_block_ids:
-            if block_boq_map.get(bid):
-                sync_report["matched"].append({
-                    "block_id": bid,
-                    "items_count": len(block_boq_map[bid]),
-                    "total_qty": round(sum(block_boq_map[bid].values()), 2),
-                })
-            else:
-                sync_report["empty"].append(bid)
+    mapped_diagram_blocks = set()
+    for ex_bid in excel_block_ids:
+        matched_diagram_blocks = excel_to_diagram_blocks.get(ex_bid, [])
+        if not matched_diagram_blocks:
+            sync_report["excel_only"].append(ex_bid)
+        elif ex_bid not in excel_has_quantities:
+            sync_report["empty"].append(ex_bid)
         else:
-            sync_report["excel_only"].append(bid)
-    
+            # Successfully mapped to 1 or more blocks
+            label = f"{ex_bid} -> {len(matched_diagram_blocks)} blocks" if len(matched_diagram_blocks) > 1 else ex_bid
+            # Count how many boq items have >0 qty across these mapped blocks
+            boq_ids_mapped = set()
+            total_qty_sum = 0
+            for d_bid in matched_diagram_blocks:
+                boq_ids_mapped.update(block_boq_map[d_bid].keys())
+                total_qty_sum += sum(block_boq_map[d_bid].values())
+                
+            sync_report["matched"].append({
+                "block_id": label,
+                "items_count": len(boq_ids_mapped),
+                "total_qty": round(total_qty_sum, 2)
+            })
+            mapped_diagram_blocks.update(matched_diagram_blocks)
+            
     for bid in diagram_block_ids:
-        if bid not in excel_block_ids:
+        if bid not in mapped_diagram_blocks:
             sync_report["diagram_only"].append(bid)
     
     # Validation warning if master BOQ exists

@@ -437,32 +437,18 @@ async def upload_project_boq(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Cannot read Excel file: {str(e)}")
     
-    # Normalize column names for flexible matching
-    col_map = {}
-    for i, col in enumerate(df.columns):
-        col_lower = str(col).strip().lower()
-        if 'mã' in col_lower or 'ma ' in col_lower or 'id' == col_lower or 'code' in col_lower:
-            col_map['id'] = col
-        elif 'tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower:
-            col_map['tt'] = col
-        elif 'noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower or 'cong viec' in col_lower:
-            col_map['name'] = col
-        elif 'dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower or 'đơn vị' in col_lower:
-            col_map['unit'] = col
-        elif ('kl' in col_lower and ('tk' in col_lower or 'thiết kế' in col_lower or 'tke' in col_lower)) or 'design' in col_lower:
-            col_map['designQty'] = col
-        elif 'don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower:
-            col_map['unitPrice'] = col
-            
-    if 'id' not in col_map and 'tt' in col_map:
-        # Fallback to TT if no explicit ID column found
-        col_map['id'] = col_map['tt']
-    if 'id' not in col_map and len(df.columns) > 1:
-        col_map['id'] = df.columns[0]
-    if 'tt' not in col_map and len(df.columns) > 1:
-        col_map['tt'] = df.columns[0]
+    # Hardcoded column map based on fixed format
+    # 0: ID, 1: STT, 2: Name, 3: Unit, 4: DesignQty, 5: ActualQty, 6: PlanQty, 7: UnitPrice, 8-10: Amounts
+    col_map = {
+        'id': df.columns[0] if len(df.columns) > 0 else '',
+        'tt': df.columns[1] if len(df.columns) > 1 else '',
+        'name': df.columns[2] if len(df.columns) > 2 else '',
+        'unit': df.columns[3] if len(df.columns) > 3 else '',
+        'designQty': df.columns[4] if len(df.columns) > 4 else '',
+        'unitPrice': df.columns[7] if len(df.columns) > 7 else '',
+    }
     
-    if 'name' not in col_map:
+    if not col_map.get('name'):
         raise HTTPException(status_code=400, detail="Cannot find 'Nội dung công việc' column in Excel file.")
     
     boq_items = []
@@ -563,37 +549,22 @@ async def sync_diagram_boq(
         except (json.JSONDecodeError, TypeError):
             pass
     
-    # Parse standard columns (first 11) and block columns (from column 12+)
-    col_map = {}
+    # Hardcoded standard columns (first 11) and dynamic block columns (from column 12+ / index 11)
+    col_map = {
+        'id': df.columns[0] if len(df.columns) > 0 else '',
+        'tt': df.columns[1] if len(df.columns) > 1 else '',
+        'name': df.columns[2] if len(df.columns) > 2 else '',
+        'unit': df.columns[3] if len(df.columns) > 3 else '',
+        'designQty': df.columns[4] if len(df.columns) > 4 else '',
+        'unitPrice': df.columns[7] if len(df.columns) > 7 else '',
+    }
+    
     block_columns = {}  # {block_id: column_name}
-    
     for i, col in enumerate(df.columns):
-        col_str = str(col).strip()
-        col_lower = col_str.lower()
-        if i <= 10 and ('mã' in col_lower or 'ma ' in col_lower or 'id' == col_lower or 'code' in col_lower):
-            col_map['id'] = col
-        elif i <= 10 and ('tt' == col_lower or 'stt' == col_lower or 'tt' in col_lower.split() or 'stt' in col_lower.split() or 'thứ tự' in col_lower):
-            col_map['tt'] = col
-        elif i <= 10 and ('noi dung' in col_lower or 'nội dung' in col_lower or 'name' in col_lower or 'công việc' in col_lower or 'cong viec' in col_lower):
-            col_map['name'] = col
-        elif i <= 10 and ('dvt' in col_lower or 'đvt' in col_lower or 'unit' in col_lower or 'đơn vị' in col_lower):
-            col_map['unit'] = col
-        elif i <= 10 and (('kl' in col_lower and ('tk' in col_lower or 'thiết kế' in col_lower or 'tke' in col_lower)) or 'design' in col_lower):
-            col_map['designQty'] = col
-        elif i <= 10 and ('don gia' in col_lower or 'đơn giá' in col_lower or 'gia' in col_lower or 'price' in col_lower):
-            col_map['unitPrice'] = col
-        elif i >= 11:
-            # Block ID columns start from column 12 (index 11)
-            block_columns[col_str] = col
-            
-    if 'id' not in col_map and 'tt' in col_map:
-        col_map['id'] = col_map['tt']
-    if 'id' not in col_map and len(df.columns) > 1:
-        col_map['id'] = df.columns[0]
-    if 'tt' not in col_map and len(df.columns) > 1:
-        col_map['tt'] = df.columns[0]
+        if i >= 11:
+            block_columns[str(col).strip()] = col
     
-    if 'name' not in col_map:
+    if not col_map.get('name'):
         raise HTTPException(status_code=400, detail="Cannot find 'Nội dung công việc' column.")
     
     # Load existing diagram objects

@@ -139,6 +139,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const [showSyncReport, setShowSyncReport] = useState(false);
 
     const panState = React.useRef({ isPanning: false, startX: 0, startY: 0, viewStartX: 0, viewStartY: 0 });
+    const touchState = React.useRef({ isTouching: false, type: 'none', startDist: 0, lastX: 0, lastY: 0, startViewX: 0, startViewY: 0, startScale: 1 });
     const lastMiddleClickTime = React.useRef(0);
 
     // Helper: Get Bounding Box
@@ -205,7 +206,112 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
 
         // Use passive: false to allow preventDefault (block scroll)
         svgEl.addEventListener('wheel', onWheel, { passive: false });
-        return () => svgEl.removeEventListener('wheel', onWheel);
+
+        // --- TOUCH EVENTS FOR MOBILE ZOOM & PAN ---
+        const onTouchStart = (e: TouchEvent) => {
+            if (e.touches.length === 1 || e.touches.length === 2) {
+                if (e.cancelable) e.preventDefault();
+            }
+
+            if (e.touches.length === 1) {
+                touchState.current = {
+                    ...touchState.current,
+                    isTouching: true,
+                    type: 'pan',
+                    startDist: 0,
+                    lastX: e.touches[0].clientX,
+                    lastY: e.touches[0].clientY,
+                    startViewX: viewState.x,
+                    startViewY: viewState.y,
+                    startScale: viewState.scale
+                };
+            } else if (e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+
+                touchState.current = {
+                    ...touchState.current,
+                    isTouching: true,
+                    type: 'zoom',
+                    startDist: dist,
+                    lastX: (e.touches[0].clientX + e.touches[1].clientX) / 2,
+                    lastY: (e.touches[0].clientY + e.touches[1].clientY) / 2,
+                    startViewX: viewState.x,
+                    startViewY: viewState.y,
+                    startScale: viewState.scale
+                };
+            }
+        };
+
+        const onTouchMove = (e: TouchEvent) => {
+            if (!touchState.current.isTouching) return;
+            if (e.cancelable) e.preventDefault();
+
+            if (touchState.current.type === 'pan' && e.touches.length === 1) {
+                const dx = e.touches[0].clientX - touchState.current.lastX;
+                const dy = e.touches[0].clientY - touchState.current.lastY;
+                setViewState({
+                    ...viewState,
+                    x: touchState.current.startViewX + dx,
+                    y: touchState.current.startViewY + dy
+                });
+            } else if (touchState.current.type === 'zoom' && e.touches.length === 2) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const currentDist = Math.sqrt(dx * dx + dy * dy);
+
+                const currentMidX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const currentMidY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+
+                const scaleFactor = currentDist / touchState.current.startDist;
+                const newScale = Math.min(Math.max(0.1, touchState.current.startScale * scaleFactor), 5);
+
+                const rect = svgEl.getBoundingClientRect();
+                const mouseX = touchState.current.lastX - rect.left;
+                const mouseY = touchState.current.lastY - rect.top;
+
+                const worldX = (mouseX - touchState.current.startViewX) / touchState.current.startScale;
+                const worldY = (mouseY - touchState.current.startViewY) / touchState.current.startScale;
+
+                const panX = currentMidX - touchState.current.lastX;
+                const panY = currentMidY - touchState.current.lastY;
+
+                const newViewX = mouseX - worldX * newScale + panX;
+                const newViewY = mouseY - worldY * newScale + panY;
+
+                setViewState({ scale: newScale, x: newViewX, y: newViewY });
+            }
+        };
+
+        const onTouchEnd = (e: TouchEvent) => {
+            if (e.touches.length === 0) {
+                touchState.current.isTouching = false;
+                touchState.current.type = 'none';
+            } else if (e.touches.length === 1 && touchState.current.type === 'zoom') {
+                touchState.current = {
+                    ...touchState.current,
+                    type: 'pan',
+                    lastX: e.touches[0].clientX,
+                    lastY: e.touches[0].clientY,
+                    startViewX: viewState.x,
+                    startViewY: viewState.y
+                };
+            }
+        };
+
+        svgEl.addEventListener('touchstart', onTouchStart, { passive: false });
+        svgEl.addEventListener('touchmove', onTouchMove, { passive: false });
+        svgEl.addEventListener('touchend', onTouchEnd, { passive: false });
+        svgEl.addEventListener('touchcancel', onTouchEnd, { passive: false });
+
+        return () => {
+            svgEl.removeEventListener('wheel', onWheel);
+            svgEl.removeEventListener('touchstart', onTouchStart);
+            svgEl.removeEventListener('touchmove', onTouchMove);
+            svgEl.removeEventListener('touchend', onTouchEnd);
+            svgEl.removeEventListener('touchcancel', onTouchEnd);
+        };
     }, [viewState]);
 
     // Handle Pan (Middle Click / Shift+Click)
@@ -2259,7 +2365,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     ref={svgRef}
                     width="100%"
                     height="100%"
-                    style={{ cursor: panState.current.isPanning ? 'grabbing' : 'grab' }}
+                    style={{ cursor: panState.current.isPanning ? 'grabbing' : 'grab', touchAction: 'none' }}
                     onMouseDown={handleCanvasMouseDown}
                     onMouseMove={handleGlobalMouseMove}
                     onMouseUp={handleGlobalMouseUp}

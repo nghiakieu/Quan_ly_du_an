@@ -141,6 +141,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const panState = React.useRef({ isPanning: false, startX: 0, startY: 0, viewStartX: 0, viewStartY: 0 });
     const touchState = React.useRef({ isTouching: false, type: 'none', startDist: 0, lastX: 0, lastY: 0, startViewX: 0, startViewY: 0, startScale: 1 });
     const lastMiddleClickTime = React.useRef(0);
+    const [isPanelOpen, setIsPanelOpen] = useState(false); // Mobile sidebar toggle state
 
     // Helper: Get Bounding Box
     const getObjBounds = (obj: BoxObject) => {
@@ -1530,11 +1531,32 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     };
 
     return (
-        <div className="w-full h-screen bg-gray-100 relative flex">
-            {/* Array Modal Removed - Now Inline */}
+        <div className="w-full h-screen bg-gray-100 relative flex overflow-hidden">
+            {/* Mobile Toggle Button (Floating) */}
+            <button
+                onClick={() => setIsPanelOpen(!isPanelOpen)}
+                className="md:hidden absolute top-4 left-4 z-30 bg-white p-2 rounded shadow-md text-gray-700 hover:text-blue-600 focus:outline-none"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            </button>
+
+            {/* Backdrop for Mobile */}
+            {isPanelOpen && (
+                <div
+                    className="md:hidden fixed inset-0 bg-black/20 z-10"
+                    onClick={() => setIsPanelOpen(false)}
+                />
+            )}
 
             {/* Properties Panel - Left  */}
-            <div className="w-72 bg-white shadow-lg z-10 overflow-auto">
+            <div className={`
+                absolute md:relative z-20 h-full w-72 bg-white shadow-lg overflow-auto transition-transform duration-300 ease-in-out
+                ${isPanelOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+            `}>
                 <div className="p-3">
                     {/* Top Actions Row */}
                     <div className="grid grid-cols-2 gap-2 mb-3">

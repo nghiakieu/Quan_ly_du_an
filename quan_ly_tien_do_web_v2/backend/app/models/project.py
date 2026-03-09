@@ -16,6 +16,11 @@ class Project(Base):
     start_date = Column(DateTime(timezone=True), nullable=True)  # Ngay khoi cong
     end_date = Column(DateTime(timezone=True), nullable=True)    # Ngay du kien hoan thanh
     
+    # URLs for the project
+    map_url = Column(String, nullable=True)
+    drive_url = Column(String, nullable=True)
+    sheet_url = Column(String, nullable=True)
+    
     # Manager ID (linked to user)
     manager_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     status = Column(String, default="planning") # planning, active, on_hold, completed

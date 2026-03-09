@@ -3,10 +3,49 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText } from 'lucide-react';
-import { getProjects, createProject, deleteProject, getProjectProgress, type Project, type ProjectProgress } from '@/lib/api';
+import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText } from 'lucide-react';
+import { getProjects, createProject, deleteProject, updateProject, getProjectProgress, type Project, type ProjectProgress } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
+
+function ProjectLinkButton({ project, type, icon: Icon, colorClass, title, onUpdate }: { project: Project, type: 'map' | 'drive' | 'sheet', icon: any, colorClass: string, title: string, onUpdate: () => void }) {
+    const link = type === 'map' ? project.map_url : (type === 'drive' ? project.drive_url : project.sheet_url);
+
+    const handleClick = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (link && !e.shiftKey) {
+            window.open(link, '_blank');
+        } else {
+            const newLink = window.prompt(`Nhập link ${title} (Để trống để xóa):`, link || '');
+            if (newLink !== null) {
+                try {
+                    const updateData: any = {};
+                    if (type === 'map') updateData.map_url = newLink.trim();
+                    else if (type === 'drive') updateData.drive_url = newLink.trim();
+                    else if (type === 'sheet') updateData.sheet_url = newLink.trim();
+
+                    await updateProject(project.id, updateData);
+                    toast.success(`Đã lưu link ${title}!`);
+                    onUpdate();
+                } catch (error) {
+                    toast.error(`Lỗi khi lưu link ${title}`);
+                }
+            }
+        }
+    };
+
+    return (
+        <button
+            onClick={handleClick}
+            className={`p-1.5 rounded-full transition-colors ${link ? colorClass : 'text-gray-400 hover:text-gray-600 hover:bg-gray-100'} shadow-sm border ${link ? 'border-transparent' : 'border-gray-200'}`}
+            title={link ? `${title} (Shift+Click để sửa)` : `Click để thêm link ${title}`}
+        >
+            <Icon className="h-4 w-4" />
+        </button>
+    );
+}
 
 export default function ProjectsDashboard() {
     const [projects, setProjects] = useState<Project[]>([]);
@@ -244,18 +283,43 @@ export default function ProjectsDashboard() {
                                     <CardHeader className="pb-3">
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1 min-w-0">
-                                                <CardTitle className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
-                                                    {project.name}
-                                                </CardTitle>
+                                                <div className="flex items-center gap-2">
+                                                    <CardTitle className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
+                                                        {project.name}
+                                                    </CardTitle>
+                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                                                        <ProjectLinkButton
+                                                            project={project}
+                                                            type="map"
+                                                            icon={Globe}
+                                                            colorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
+                                                            title="Bản đồ"
+                                                            onUpdate={fetchProjects}
+                                                        />
+                                                        <ProjectLinkButton
+                                                            project={project}
+                                                            type="drive"
+                                                            icon={FolderOpen}
+                                                            colorClass="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
+                                                            title="Hồ sơ Drive"
+                                                            onUpdate={fetchProjects}
+                                                        />
+                                                        <ProjectLinkButton
+                                                            project={project}
+                                                            type="sheet"
+                                                            icon={BookOpenText}
+                                                            colorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                                                            title="Nhật ký Báo cáo"
+                                                            onUpdate={fetchProjects}
+                                                        />
+                                                    </div>
+                                                </div>
                                                 {project.description && (
                                                     <CardDescription className="mt-1 text-xs line-clamp-2">
                                                         {project.description}
                                                     </CardDescription>
                                                 )}
                                             </div>
-                                            <span className={`text-xs px-2 py-1 rounded-full border font-medium flex-shrink-0 ml-2 ${statusConfig.color}`}>
-                                                {statusConfig.label}
-                                            </span>
                                         </div>
                                     </CardHeader>
 

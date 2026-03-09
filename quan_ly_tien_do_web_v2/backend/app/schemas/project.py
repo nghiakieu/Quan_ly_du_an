@@ -10,6 +10,9 @@ class ProjectBase(BaseModel):
     total_budget: Optional[float] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    map_url: Optional[str] = None
+    drive_url: Optional[str] = None
+    sheet_url: Optional[str] = None
 
 class ProjectCreate(ProjectBase):
     pass
@@ -22,6 +25,9 @@ class ProjectUpdate(BaseModel):
     total_budget: Optional[float] = None
     start_date: Optional[datetime] = None
     end_date: Optional[datetime] = None
+    map_url: Optional[str] = None
+    drive_url: Optional[str] = None
+    sheet_url: Optional[str] = None
 
 # Diagram summary for embedding in project response
 class DiagramSummary(BaseModel):

@@ -86,6 +86,9 @@ export interface Project {
     total_budget?: number;
     start_date?: string;
     end_date?: string;
+    map_url?: string;
+    drive_url?: string;
+    sheet_url?: string;
     manager_id?: number;
     created_at: string;
     updated_at: string;
@@ -179,6 +182,9 @@ export const createProject = async (data: {
     total_budget?: number;
     start_date?: string;
     end_date?: string;
+    map_url?: string;
+    drive_url?: string;
+    sheet_url?: string;
 }): Promise<Project> => {
     const response = await api.post('/projects/', data);
     return response.data;
@@ -192,6 +198,9 @@ export const updateProject = async (id: number | string, data: {
     total_budget?: number;
     start_date?: string;
     end_date?: string;
+    map_url?: string;
+    drive_url?: string;
+    sheet_url?: string;
 }): Promise<Project> => {
     const response = await api.put(`/projects/${id}`, data);
     return response.data;

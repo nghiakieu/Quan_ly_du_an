@@ -6,10 +6,18 @@ interface DraggableBoxProps {
     y: number;
     label: string;
     color?: string;
-    type?: 'rectangle' | 'circle' | 'text';
+    type?: 'rectangle' | 'circle' | 'text' | 'slice';
     width?: number;
     height?: number;
     diameter?: number;
+    // Slice properties
+    parts?: number;
+    totalQuantity?: number;
+    actualQuantity?: number;
+    inProgressQuantity?: number;
+    planQuantity?: number;
+    orient?: 'horizontal' | 'vertical';
+    direction?: 'ltr' | 'rtl' | 'ttb' | 'btt';
     // Text properties
     text?: string;
     fontSize?: number;
@@ -19,12 +27,6 @@ interface DraggableBoxProps {
     fontStyle?: 'normal' | 'italic';
     // Status
     status?: 'not_started' | 'in_progress' | 'completed' | 'planned';
-    /** 0..100, for progress bar when progressType is percentage or segments */
-    progressPct?: number;
-    progressType?: 'none' | 'percentage' | 'segments';
-    unit?: string;
-    totalQuantity?: number;
-    actualQuantity?: number;
     isSelected?: boolean;
     onDrag: (id: string, newX: number, newY: number) => void;
     onMouseDown?: (e: React.MouseEvent) => void;
@@ -57,7 +59,13 @@ const DraggableBox = ({
     fontWeight = 'normal',
     fontStyle = 'normal',
     status = 'not_started',
-    progressPct,
+    parts = 10,
+    totalQuantity = 100,
+    actualQuantity = 0,
+    inProgressQuantity = 0,
+    planQuantity = 0,
+    orient = 'horizontal',
+    direction = 'ltr',
     isSelected = false,
     onDrag,
     onMouseDown,
@@ -175,7 +183,18 @@ const DraggableBox = ({
         ? { x: -diameter / 2 - 5, y: -diameter / 2 - 5, width: diameter + 10, height: diameter + 10 }
         : type === 'text'
             ? { x: -(text || '').length * fontSize * 0.3 - 5, y: -fontSize * 0.6 - 5, width: (text || '').length * fontSize * 0.6 + 10, height: fontSize * 1.2 + 10 }
-            : { x: -width / 2 - 5, y: -height / 2 - 5, width: width + 10, height: height + 10 };
+            : { x: -width / 2 - 5, y: -height / 2 - 5, width: width + 10, height: height + 10 }; // rectangle and slice
+
+    // Compute ratios for stacked bar slice
+    const computeSlices = () => {
+        const total = Math.max(0.0001, totalQuantity || 1); // Tránh chia cho 0
+        const doneRatio = Math.min(Math.max((actualQuantity || 0) / total, 0), 1);
+        const inProgRatio = Math.min(Math.max((inProgressQuantity || 0) / total, 0), 1 - doneRatio);
+        const planRatio = Math.min(Math.max((planQuantity || 0) / total, 0), 1 - doneRatio - inProgRatio);
+
+        return { doneRatio, inProgRatio, planRatio };
+    };
+    const { doneRatio, inProgRatio, planRatio } = type === 'slice' ? computeSlices() : { doneRatio: 0, inProgRatio: 0, planRatio: 0 };
 
     return (
         <g
@@ -269,13 +288,6 @@ const DraggableBox = ({
                         strokeWidth={2}
                         pointerEvents="none"
                     />
-                    {/* Progress bar (theo % khối lượng hoặc đợt) */}
-                    {progressPct != null && progressPct > 0 && progressPct < 100 && (
-                        <>
-                            <rect x={-width / 2} y={height / 2 - 4} width={width} height={4} fill="#e5e7eb" rx={2} pointerEvents="none" />
-                            <rect x={-width / 2} y={height / 2 - 4} width={(width * progressPct) / 100} height={4} fill="#10b981" rx={2} pointerEvents="none" />
-                        </>
-                    )}
                     {/* Label */}
                     <text
                         x={0}
@@ -287,6 +299,82 @@ const DraggableBox = ({
                         fontWeight="bold"
                         pointerEvents="none"
                         transform="scale(1, -1)"
+                    >
+                        {label}
+                    </text>
+                </>
+            ) : type === 'slice' ? (
+                <>
+                    {/* Transparent background for click handling */}
+                    <rect x={-width / 2} y={-height / 2} width={width} height={height} fill="white" fillOpacity={0} stroke="none" />
+                    <g transform={`translate(${-width / 2}, ${-height / 2})`}>
+                        {(() => {
+                            // Stacked Bar rendering
+                            // Trình tự vẽ: done -> inProg -> plan, còn lại là background trắng x=-width/2 phía dưới
+                            const ltr = direction === 'ltr' || direction === 'ttb'; // 'ttb' giống 'ltr' nếu hiểu theo trục tịnh tiến
+                            const isHoriz = orient === 'horizontal';
+
+                            const lengthDone = doneRatio * (isHoriz ? width : height);
+                            const lengthInProg = inProgRatio * (isHoriz ? width : height);
+                            const lengthPlan = planRatio * (isHoriz ? width : height);
+
+                            // Vị trí (x hoặc y) bắt đầu của từng khối
+                            const startDone = ltr ? 0 : (isHoriz ? width - lengthDone : height - lengthDone);
+                            const startInProg = ltr ? lengthDone : startDone - lengthInProg;
+                            const startPlan = ltr ? lengthDone + lengthInProg : startInProg - lengthPlan;
+
+                            return (
+                                <>
+                                    {/* Done phase */}
+                                    {lengthDone > 0 && (
+                                        <rect
+                                            x={isHoriz ? startDone : 0}
+                                            y={isHoriz ? 0 : startDone}
+                                            width={isHoriz ? lengthDone : width}
+                                            height={isHoriz ? height : lengthDone}
+                                            fill={STATUS_COLORS['completed']}
+                                            stroke="none" pointerEvents="none"
+                                        />
+                                    )}
+                                    {/* In Progress phase */}
+                                    {lengthInProg > 0 && (
+                                        <rect
+                                            x={isHoriz ? startInProg : 0}
+                                            y={isHoriz ? 0 : startInProg}
+                                            width={isHoriz ? lengthInProg : width}
+                                            height={isHoriz ? height : lengthInProg}
+                                            fill={STATUS_COLORS['in_progress']}
+                                            stroke="none" pointerEvents="none"
+                                        />
+                                    )}
+                                    {/* Plan phase */}
+                                    {lengthPlan > 0 && (
+                                        <rect
+                                            x={isHoriz ? startPlan : 0}
+                                            y={isHoriz ? 0 : startPlan}
+                                            width={isHoriz ? lengthPlan : width}
+                                            height={isHoriz ? height : lengthPlan}
+                                            fill={STATUS_COLORS['planned']}
+                                            stroke="none" pointerEvents="none"
+                                        />
+                                    )}
+                                </>
+                            );
+                        })()}
+                    </g>
+                    <rect x={-width / 2} y={-height / 2} width={width} height={height} fill="none" stroke={isDragging ? '#3b82f6' : "#000"} strokeWidth={isDragging ? 3 : 2} pointerEvents="none" />
+                    {/* Label & Progress Text */}
+                    <text
+                        x={0}
+                        y={0}
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        fill={"white"}
+                        fontSize="12"
+                        fontWeight="bold"
+                        pointerEvents="none"
+                        transform="scale(1, -1)"
+                        style={{ textShadow: "0px 1px 2px rgba(0,0,0,0.8)" }}
                     >
                         {label}
                     </text>
@@ -316,13 +404,6 @@ const DraggableBox = ({
                         stroke={status === 'not_started' ? '#000' : "#000"}
                         strokeWidth={2}
                     />
-                    {/* Progress bar for circle */}
-                    {progressPct != null && progressPct > 0 && progressPct < 100 && (
-                        <>
-                            <rect x={-diameter / 2} y={diameter / 2} width={diameter} height={4} fill="#e5e7eb" rx={2} pointerEvents="none" />
-                            <rect x={-diameter / 2} y={diameter / 2} width={(diameter * progressPct) / 100} height={4} fill="#10b981" rx={2} pointerEvents="none" />
-                        </>
-                    )}
                     {/* Label */}
                     <text
                         x={0}
@@ -354,15 +435,26 @@ export default React.memo(DraggableBox, (prev, next) => {
         prev.width === next.width &&
         prev.height === next.height &&
         prev.diameter === next.diameter &&
+        prev.parts === next.parts &&
+        prev.totalQuantity === next.totalQuantity &&
+        prev.actualQuantity === next.actualQuantity &&
+        prev.inProgressQuantity === next.inProgressQuantity &&
+        prev.planQuantity === next.planQuantity &&
+        prev.orient === next.orient &&
+        prev.direction === next.direction &&
         prev.text === next.text &&
         prev.fontSize === next.fontSize &&
         prev.fontFamily === next.fontFamily &&
         prev.fontColor === next.fontColor &&
         prev.fontWeight === next.fontWeight &&
         prev.fontStyle === next.fontStyle &&
+        prev.parts === next.parts &&
+        prev.totalQuantity === next.totalQuantity &&
+        prev.actualQuantity === next.actualQuantity &&
+        prev.orient === next.orient &&
+        prev.direction === next.direction &&
         prev.isSelected === next.isSelected &&
         prev.scale === next.scale &&
-        prev.status === next.status &&
-        prev.progressPct === next.progressPct
+        prev.status === next.status
     );
 });

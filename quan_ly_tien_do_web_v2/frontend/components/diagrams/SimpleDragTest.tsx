@@ -25,10 +25,21 @@ interface BoxObject {
     y: number;
     label: string;
     color: string;
-    type: 'rectangle' | 'circle' | 'text';
-    width?: number;  // For rectangle
-    height?: number; // For rectangle
+    type: 'rectangle' | 'circle' | 'text' | 'slice';
+    width?: number;  // For rectangle/slice
+    height?: number; // For rectangle/slice
     diameter?: number; // For circle
+    // Slice properties
+    parts?: number;
+    totalQuantity?: number;
+    actualQuantity?: number;
+    inProgressQuantity?: number;
+    planQuantity?: number;
+    // History array for completed quantity
+    actualHistory?: { id: string; date: string; quantity: number }[];
+    isHistoryOpen?: boolean; // UI state for collapsing history panel
+    orient?: 'horizontal' | 'vertical';
+    direction?: 'ltr' | 'rtl' | 'ttb' | 'btt';
     // Text properties
     text?: string;
     fontSize?: number;
@@ -36,48 +47,17 @@ interface BoxObject {
     fontColor?: string;
     fontWeight?: 'normal' | 'bold';
     fontStyle?: 'normal' | 'italic';
-    // Status for workflow (rect/circle only)
+    // Status for workflow (rect/circle/slice only)
     status?: 'not_started' | 'in_progress' | 'completed' | 'planned';
     completionDate?: string; // YYYY-MM-DD
     // BIM Data
     boqIds?: { [boqId: string]: number }; // Map BOQ ID -> Quantity for this object
-    // ---- Tiến độ theo % hoặc theo đợt ----
-    progressType?: 'none' | 'percentage' | 'segments';
-    totalQuantity?: number;   // Khối lượng tổng (m³, m², ...)
-    actualQuantity?: number;  // Khối lượng đã thực hiện
-    unit?: string;           // m³, m², ...
-    segments?: BoxObjectSegment[]; // Đợt thi công (trụ ít đợt)
 }
 
 import { BOQItem } from './BOQUploader';
 
 /** Resolve effective status and progress % from BoxObject (percentage / segments / none). */
 function resolveBoxProgress(obj: BoxObject): { status: 'not_started' | 'in_progress' | 'completed' | 'planned'; progressPct: number } {
-    const pt = obj.progressType || 'none';
-    if (pt === 'percentage') {
-        const total = obj.totalQuantity ?? 0;
-        const actual = obj.actualQuantity ?? 0;
-        if (total <= 0) return { status: 'not_started', progressPct: 0 };
-        const pct = Math.min(100, (actual / total) * 100);
-        if (pct >= 99.99) return { status: 'completed', progressPct: 100 };
-        if (pct <= 0) return { status: 'not_started', progressPct: 0 };
-        return { status: 'in_progress', progressPct: Math.round(pct * 10) / 10 };
-    }
-    if (pt === 'segments' && obj.segments?.length) {
-        let totalW = 0, doneW = 0;
-        let hasInProgress = false;
-        for (const s of obj.segments) {
-            const w = s.weight ?? 1 / obj.segments.length;
-            totalW += w;
-            if (s.status === 'completed') doneW += w;
-            else if (s.status === 'in_progress') hasInProgress = true;
-        }
-        if (totalW <= 0) return { status: obj.status || 'not_started', progressPct: 0 };
-        const pct = (doneW / totalW) * 100;
-        if (pct >= 99.99) return { status: 'completed', progressPct: 100 };
-        if (pct <= 0 && !hasInProgress) return { status: 'not_started', progressPct: 0 };
-        return { status: 'in_progress', progressPct: Math.round(pct * 10) / 10 };
-    }
     const s = obj.status || 'not_started';
     const pct = s === 'completed' ? 100 : s === 'in_progress' ? 50 : 0;
     return { status: s, progressPct: pct };
@@ -743,7 +723,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         setObjects(dataCallback);
     };
 
-    const handleAddBox = (type: 'rectangle' | 'circle' | 'text' = 'rectangle') => {
+    const handleAddBox = (type: 'rectangle' | 'circle' | 'text' | 'slice' = 'rectangle') => {
         const newId = `${type}-${Date.now()}`;
 
         // Calculate spawn position (Top-Left of Viewport + Padding)
@@ -781,6 +761,25 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                 type: 'circle',
                 diameter: 100,
                 status: 'not_started'
+            };
+        } else if (type === 'slice') {
+            newBox = {
+                id: newId,
+                x: spawnX,
+                y: spawnY,
+                label: `Slide ${objects.length + 1}`,
+                color: COLORS[objects.length % COLORS.length],
+                type: 'slice',
+                width: 220,
+                height: 60,
+                status: 'not_started',
+                parts: 10,
+                totalQuantity: 100,
+                actualQuantity: 20,
+                inProgressQuantity: 30,
+                planQuantity: 40,
+                orient: 'horizontal',
+                direction: 'ltr'
             };
         } else {
             newBox = {
@@ -1623,22 +1622,28 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     {isAuthorized && (
                         <div className="mb-3">
                             <p className="text-xs font-semibold text-gray-600 mb-1">Add Object:</p>
-                            <div className="grid grid-cols-3 gap-1">
+                            <div className="grid grid-cols-4 gap-1">
                                 <button
                                     onClick={() => handleAddBox('rectangle')}
-                                    className="px-2 py-1.5 text-xs bg-green-500 text-white rounded hover:bg-green-600 font-semibold"
+                                    className="px-1 py-1.5 text-[11px] bg-green-500 text-white rounded hover:bg-green-600 font-semibold border border-green-600 shadow-sm transition-colors text-center"
                                 >
                                     + Rect
                                 </button>
                                 <button
                                     onClick={() => handleAddBox('circle')}
-                                    className="px-2 py-1.5 text-xs bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold"
+                                    className="px-1 py-1.5 text-[11px] bg-blue-500 text-white rounded hover:bg-blue-600 font-semibold border border-blue-600 shadow-sm transition-colors text-center"
                                 >
                                     + Circle
                                 </button>
                                 <button
+                                    onClick={() => handleAddBox('slice')}
+                                    className="px-1 py-1.5 text-[11px] bg-teal-500 text-white rounded hover:bg-teal-600 font-semibold border border-teal-600 shadow-sm transition-colors text-center"
+                                >
+                                    + Slide
+                                </button>
+                                <button
                                     onClick={() => handleAddBox('text')}
-                                    className="px-2 py-1.5 text-xs bg-purple-500 text-white rounded hover:bg-purple-600 font-semibold"
+                                    className="px-1 py-1.5 text-[11px] bg-purple-500 text-white rounded hover:bg-purple-600 font-semibold border border-purple-600 shadow-sm transition-colors text-center"
                                 >
                                     + Text
                                 </button>
@@ -1868,14 +1873,12 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                             </div>
                                         </>
                                     ) : (
-                                        /* Rect/Circle Properties */
+                                        /* Rect/Circle/Slice Properties */
                                         <>
-
-
-                                            <div className="grid grid-cols-2 gap-2">
+                                            <div className="grid grid-cols-2 gap-2 mb-2">
                                                 <div>
                                                     <label className="text-xs text-gray-600">
-                                                        {selectedObject.type === 'rectangle' ? 'Width' : 'Diameter'}
+                                                        {selectedObject.type === 'rectangle' || selectedObject.type === 'slice' ? 'Width' : 'Diameter'}
                                                     </label>
                                                     <input
                                                         type="number"
@@ -1884,7 +1887,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                                         className="w-full px-2 py-1 text-xs border rounded"
                                                     />
                                                 </div>
-                                                {selectedObject.type === 'rectangle' && (
+                                                {(selectedObject.type === 'rectangle' || selectedObject.type === 'slice') && (
                                                     <div>
                                                         <label className="text-xs text-gray-600">Height</label>
                                                         <input
@@ -1897,152 +1900,207 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                                 )}
                                             </div>
 
-                                            {/* Cách thể hiện tiến độ: không / theo % khối lượng / theo đợt */}
-                                            <div className="pt-2 border-t">
-                                                <label className="text-xs text-gray-600 mb-1 block">Cách thể hiện tiến độ</label>
-                                                <select
-                                                    value={selectedObject.progressType || 'none'}
-                                                    onChange={(e) => handleChangeDimensions({ progressType: e.target.value as 'none' | 'percentage' | 'segments' })}
-                                                    className="w-full px-2 py-1 text-xs border rounded"
-                                                >
-                                                    <option value="none">Trạng thái đơn (Chưa / Đang / Xong)</option>
-                                                    <option value="percentage">Theo % khối lượng (đào đắp, san lấp…)</option>
-                                                    <option value="segments">Theo đợt (trụ, dầm…)</option>
-                                                </select>
-                                            </div>
-
-                                            {/* Theo % khối lượng */}
-                                            {(selectedObject.progressType === 'percentage') && (
-                                                <div className="pt-2 space-y-2">
-                                                    <div>
-                                                        <label className="text-xs text-gray-600">Khối lượng tổng</label>
-                                                        <input
-                                                            type="number"
-                                                            min={0}
-                                                            step={0.01}
-                                                            value={selectedObject.totalQuantity ?? ''}
-                                                            onChange={(e) => handleChangeDimensions({ totalQuantity: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                                            className="w-full px-2 py-1 text-xs border rounded"
-                                                            placeholder="VD: 12500"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-xs text-gray-600">Khối lượng đã thực hiện</label>
-                                                        <input
-                                                            type="number"
-                                                            min={0}
-                                                            step={0.01}
-                                                            value={selectedObject.actualQuantity ?? ''}
-                                                            onChange={(e) => handleChangeDimensions({ actualQuantity: e.target.value === '' ? undefined : Number(e.target.value) })}
-                                                            className="w-full px-2 py-1 text-xs border rounded"
-                                                            placeholder="VD: 4375"
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <label className="text-xs text-gray-600">Đơn vị</label>
-                                                        <input
-                                                            type="text"
-                                                            value={selectedObject.unit ?? ''}
-                                                            onChange={(e) => handleChangeDimensions({ unit: e.target.value || undefined })}
-                                                            className="w-full px-2 py-1 text-xs border rounded"
-                                                            placeholder="m³"
-                                                        />
-                                                    </div>
-                                                    {((selectedObject.totalQuantity ?? 0) > 0) && (
-                                                        <p className="text-xs text-green-700 font-medium">
-                                                            Tiến độ: {resolveBoxProgress(selectedObject).progressPct}%
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            )}
-
-                                            {/* Theo đợt */}
-                                            {(selectedObject.progressType === 'segments') && (
-                                                <div className="pt-2 space-y-2">
+                                            {/* Slice specific properties */}
+                                            {selectedObject.type === 'slice' && (
+                                                <div className="pt-2 border-t border-gray-200 mb-2 space-y-2">
                                                     <div className="flex justify-between items-center">
-                                                        <span className="text-xs text-gray-600">Các đợt</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                const segs = selectedObject.segments ?? [];
-                                                                const newSeg: BoxObjectSegment = {
-                                                                    id: `s-${Date.now()}`,
-                                                                    name: `Đợt ${segs.length + 1}`,
-                                                                    weight: segs.length ? 0 : 1,
-                                                                    status: 'not_started',
-                                                                };
-                                                                if (segs.length) {
-                                                                    const totalW = segs.reduce((a, s) => a + (s.weight ?? 0), 0);
-                                                                    newSeg.weight = totalW >= 1 ? 0 : 1 - totalW;
-                                                                }
-                                                                handleChangeDimensions({ segments: [...segs, newSeg] });
-                                                            }}
-                                                            className="text-xs text-blue-600 hover:underline"
-                                                        >
-                                                            + Thêm đợt
-                                                        </button>
+                                                        <span className="text-xs font-semibold text-teal-700">❖ Slide Settings (Stacked)</span>
                                                     </div>
-                                                    {(selectedObject.segments ?? []).map((seg, i) => (
-                                                        <div key={seg.id} className="flex flex-wrap items-center gap-1 p-2 bg-gray-50 rounded text-xs">
+
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div>
+                                                            <div className="flex items-center h-5">
+                                                                <label className="text-xs text-gray-600">Tổng KL</label>
+                                                            </div>
                                                             <input
-                                                                value={seg.name}
+                                                                type="number" min={1}
+                                                                value={selectedObject.totalQuantity ?? 100}
                                                                 onChange={(e) => {
-                                                                    const next = [...(selectedObject.segments ?? [])];
-                                                                    next[i] = { ...next[i], name: e.target.value };
-                                                                    handleChangeDimensions({ segments: next });
+                                                                    const val = Math.max(1, Number(e.target.value));
+                                                                    handleChangeDimensions({
+                                                                        totalQuantity: val,
+                                                                        // Giới hạn các giá trị con không vượt quá total mới (logic này có thể linh hoạt, tạm thời cho an toàn)
+                                                                        actualQuantity: Math.min(selectedObject.actualQuantity || 0, val)
+                                                                    });
                                                                 }}
-                                                                className="flex-1 min-w-0 px-1 py-0.5 border rounded"
-                                                                placeholder="Tên đợt"
+                                                                className="w-full px-2 py-1 text-xs border rounded"
                                                             />
+                                                        </div>
+                                                        <div>
+                                                            <div className="flex justify-between items-center h-5">
+                                                                <label className="text-xs text-green-700 font-semibold">Hoàn thành</label>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const isOpen = !selectedObject.isHistoryOpen;
+                                                                        let newHistory = selectedObject.actualHistory;
+                                                                        // Nếu chưa có mảng history bao giờ, tạo array rỗng khi bấm +
+                                                                        if (isOpen && (!newHistory)) {
+                                                                            newHistory = [];
+                                                                        }
+                                                                        handleChangeDimensions({ isHistoryOpen: isOpen, actualHistory: newHistory });
+                                                                    }}
+                                                                    className={`text-xs px-1.5 py-0.5 rounded font-bold leading-none border ${selectedObject.isHistoryOpen ? 'bg-green-500 text-white border-green-600' : 'bg-white text-green-600 border-green-300 hover:bg-green-50'}`}
+                                                                    title="Lịch sử đợt thi công"
+                                                                >
+                                                                    {selectedObject.isHistoryOpen ? '−' : '+'}
+                                                                </button>
+                                                            </div>
                                                             <input
-                                                                type="number"
-                                                                min={0}
-                                                                max={1}
-                                                                step={0.1}
-                                                                value={seg.weight}
+                                                                type="number" min={0}
+                                                                value={selectedObject.actualQuantity ?? 0}
+                                                                disabled={!!(selectedObject.actualHistory && selectedObject.actualHistory.length > 0)}
                                                                 onChange={(e) => {
-                                                                    const next = [...(selectedObject.segments ?? [])];
-                                                                    next[i] = { ...next[i], weight: Number(e.target.value) };
-                                                                    handleChangeDimensions({ segments: next });
+                                                                    const val = Math.min(Number(e.target.value), selectedObject.totalQuantity || 100);
+                                                                    handleChangeDimensions({ actualQuantity: val });
                                                                 }}
-                                                                className="w-12 px-1 py-0.5 border rounded"
-                                                                title="Tỉ trọng 0–1"
+                                                                className={`w-full px-2 py-1 text-xs border rounded ${selectedObject.actualHistory && selectedObject.actualHistory.length > 0 ? 'bg-gray-100 text-gray-500 border-gray-300' : 'border-green-300 bg-green-50'}`}
                                                             />
-                                                            <select
-                                                                value={seg.status}
-                                                                onChange={(e) => {
-                                                                    const next = [...(selectedObject.segments ?? [])];
-                                                                    next[i] = { ...next[i], status: e.target.value as 'not_started' | 'in_progress' | 'completed' };
-                                                                    handleChangeDimensions({ segments: next });
-                                                                }}
-                                                                className="px-1 py-0.5 border rounded"
-                                                            >
-                                                                <option value="not_started">Chưa</option>
-                                                                <option value="in_progress">Đang</option>
-                                                                <option value="completed">Xong</option>
-                                                            </select>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* History Panel */}
+                                                    {selectedObject.isHistoryOpen && selectedObject.actualHistory && (
+                                                        <div className="mt-2 p-2 bg-gray-50 border border-green-200 rounded text-xs space-y-2 relative shadow-inner">
+                                                            <div className="font-semibold text-green-800 flex justify-between border-b border-green-200 pb-1 items-center">
+                                                                <span>Bảng nhập đợt thi công:</span>
+                                                                <span className="bg-green-100 px-1.5 py-0.5 rounded">Tổng: {selectedObject.actualHistory.reduce((s, item) => s + item.quantity, 0).toFixed(2)}</span>
+                                                            </div>
+
+                                                            {selectedObject.actualHistory.length === 0 && (
+                                                                <div className="text-center text-gray-500 py-2 italic opacity-70">Chưa có dữ liệu thi công</div>
+                                                            )}
+
+                                                            <div className="max-h-32 overflow-y-auto space-y-1.5 pr-1">
+                                                                {selectedObject.actualHistory.map((item, idx) => (
+                                                                    <div key={item.id} className="flex gap-1 items-center bg-white p-1 rounded border border-gray-200 shadow-sm transition-all hover:border-green-300">
+                                                                        <input
+                                                                            type="date"
+                                                                            value={item.date}
+                                                                            onChange={(e) => {
+                                                                                const newHistory = [...selectedObject.actualHistory!];
+                                                                                newHistory[idx].date = e.target.value;
+                                                                                handleChangeDimensions({ actualHistory: newHistory });
+                                                                            }}
+                                                                            className="w-[105px] px-1 py-0.5 border rounded text-[11px] outline-none focus:border-green-400"
+                                                                        />
+                                                                        <input
+                                                                            type="number"
+                                                                            min={0}
+                                                                            value={item.quantity}
+                                                                            onChange={(e) => {
+                                                                                const val = Number(e.target.value);
+                                                                                const newHistory = [...selectedObject.actualHistory!];
+                                                                                newHistory[idx].quantity = val;
+                                                                                const newTotal = newHistory.reduce((s, h) => s + h.quantity, 0);
+                                                                                handleChangeDimensions({
+                                                                                    actualHistory: newHistory,
+                                                                                    actualQuantity: Math.min(newTotal, selectedObject.totalQuantity || 100)
+                                                                                });
+                                                                            }}
+                                                                            className="flex-1 px-1 py-0.5 border rounded w-12 text-[11px] outline-none focus:border-green-400 font-medium text-green-700"
+                                                                            placeholder="KL"
+                                                                        />
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                const newHistory = selectedObject.actualHistory!.filter(h => h.id !== item.id);
+                                                                                const newTotal = newHistory.reduce((s, h) => s + h.quantity, 0);
+                                                                                handleChangeDimensions({
+                                                                                    actualHistory: newHistory,
+                                                                                    actualQuantity: newHistory.length > 0 ? Math.min(newTotal, selectedObject.totalQuantity || 100) : (selectedObject.actualQuantity || 0)
+                                                                                });
+                                                                            }}
+                                                                            className="text-gray-400 hover:text-red-500 hover:bg-red-50 px-1.5 py-0.5 rounded font-bold text-sm transition-colors"
+                                                                            title="Xóa đợt này"
+                                                                        >
+                                                                            ×
+                                                                        </button>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
                                                             <button
-                                                                type="button"
                                                                 onClick={() => {
-                                                                    const next = (selectedObject.segments ?? []).filter((_, j) => j !== i);
-                                                                    handleChangeDimensions({ segments: next.length ? next : undefined });
+                                                                    const newHistory = [...(selectedObject.actualHistory || [])];
+                                                                    newHistory.push({ id: Date.now().toString(), date: new Date().toISOString().split('T')[0], quantity: 0 });
+                                                                    handleChangeDimensions({ actualHistory: newHistory });
                                                                 }}
-                                                                className="text-red-600 hover:underline"
+                                                                className="w-full text-xs bg-green-100 text-green-700 py-1.5 rounded hover:bg-green-200 font-semibold border border-green-300 border-dashed transition-colors flex items-center justify-center gap-1 mt-2"
                                                             >
-                                                                ✕
+                                                                <span>+</span> Thêm đợt mới
                                                             </button>
                                                         </div>
-                                                    ))}
-                                                    {(selectedObject.segments?.length ?? 0) > 0 && (
-                                                        <p className="text-xs text-green-700 font-medium">
-                                                            Tiến độ: {resolveBoxProgress(selectedObject).progressPct}%
-                                                        </p>
                                                     )}
+
+                                                    <div className="grid grid-cols-2 gap-2 mt-1">
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-600 text-blue-700 font-semibold">Đang làm</label>
+                                                            <input
+                                                                type="number" min={0}
+                                                                value={selectedObject.inProgressQuantity ?? 0}
+                                                                onChange={(e) => {
+                                                                    const val = Math.min(Number(e.target.value), selectedObject.totalQuantity || 100);
+                                                                    handleChangeDimensions({ inProgressQuantity: val });
+                                                                }}
+                                                                className="w-full px-2 py-1 text-xs border rounded border-blue-300 bg-blue-50"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-600 text-orange-700 font-semibold">Kế hoạch</label>
+                                                            <input
+                                                                type="number" min={0}
+                                                                value={selectedObject.planQuantity ?? 0}
+                                                                onChange={(e) => {
+                                                                    const val = Math.min(Number(e.target.value), selectedObject.totalQuantity || 100);
+                                                                    handleChangeDimensions({ planQuantity: val });
+                                                                }}
+                                                                className="w-full px-2 py-1 text-xs border rounded border-orange-300 bg-orange-50"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-2 gap-2 mt-1">
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-500 mb-1 block">Orientation</label>
+                                                            <select
+                                                                value={selectedObject.orient || 'horizontal'}
+                                                                onChange={(e) => {
+                                                                    const val = e.target.value as 'horizontal' | 'vertical';
+                                                                    handleChangeDimensions({
+                                                                        orient: val,
+                                                                        direction: val === 'horizontal' ? 'ltr' : 'ttb' // default matching direction
+                                                                    });
+                                                                }}
+                                                                className="w-full px-1 py-1 text-[11px] border rounded bg-white"
+                                                            >
+                                                                <option value="horizontal">↔ Ngang</option>
+                                                                <option value="vertical">↕ Dọc</option>
+                                                            </select>
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] text-gray-500 mb-1 block">Direction</label>
+                                                            <select
+                                                                value={selectedObject.direction || 'ltr'}
+                                                                onChange={(e) => handleChangeDimensions({ direction: e.target.value as any })}
+                                                                className="w-full px-1 py-1 text-[11px] border rounded bg-white"
+                                                            >
+                                                                {(!selectedObject.orient || selectedObject.orient === 'horizontal') ? (
+                                                                    <>
+                                                                        <option value="ltr">← Trái → Phải</option>
+                                                                        <option value="rtl">→ Phải → Trái</option>
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <option value="ttb">↓ Trên → Dưới</option>
+                                                                        <option value="btt">↑ Dưới → Trên</option>
+                                                                    </>
+                                                                )}
+                                                            </select>
+                                                        </div>
+                                                    </div>
                                                 </div>
                                             )}
 
-                                            {/* Status - Workflow tracking (dùng khi progressType = none) */}
-                                            {(!selectedObject.progressType || selectedObject.progressType === 'none') && (
+                                            {/* Status - Workflow tracking */}
+                                            {selectedObject.type !== 'slice' && (
                                                 <div>
                                                     <label className="text-xs text-gray-600">Status</label>
                                                     <div className="grid grid-cols-2 gap-1">
@@ -2139,10 +2197,23 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                             warnings.push(`⚠️ Obj "${obj.label}": Illegal Value ${(val / totalContract).toFixed(0)}x Total! Check Qty.`);
                                         }
 
-                                        if (obj.status === 'completed') {
-                                            completed += val;
-                                        } else if (obj.status === 'planned' || obj.status === 'in_progress') {
-                                            planned += val;
+                                        if (obj.type === 'slice') {
+                                            // Phân bổ tỷ lệ (hệ số) dựa trên các thành phần quantity.
+                                            const total = obj.totalQuantity || 1;
+                                            // Đảm bảo không vượt qúa 1
+                                            const actRatio = Math.min(Math.max((obj.actualQuantity || 0) / total, 0), 1);
+                                            const progRatio = Math.min(Math.max((obj.inProgressQuantity || 0) / total, 0), 1);
+                                            const planRatio = Math.min(Math.max((obj.planQuantity || 0) / total, 0), 1);
+
+                                            completed += val * actRatio;
+                                            planned += val * (progRatio + planRatio);
+                                            inProgress += val * progRatio; // Tính chơi để debug nếu cần, gộp lên planned
+                                        } else {
+                                            if (obj.status === 'completed') {
+                                                completed += val;
+                                            } else if (obj.status === 'planned' || obj.status === 'in_progress') {
+                                                planned += val;
+                                            }
                                         }
                                     }
                                 });
@@ -2221,6 +2292,13 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                         width={obj.width}
                                         height={obj.height}
                                         diameter={obj.diameter}
+                                        parts={obj.parts}
+                                        totalQuantity={obj.totalQuantity}
+                                        actualQuantity={obj.actualQuantity}
+                                        inProgressQuantity={obj.inProgressQuantity}
+                                        planQuantity={obj.planQuantity}
+                                        orient={obj.orient}
+                                        direction={obj.direction}
                                         text={obj.text}
                                         fontSize={obj.fontSize}
                                         fontFamily={obj.fontFamily}
@@ -2228,11 +2306,6 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                                         fontWeight={obj.fontWeight}
                                         fontStyle={obj.fontStyle}
                                         status={effectiveStatus}
-                                        progressPct={progressPct}
-                                        progressType={obj.progressType}
-                                        unit={obj.unit}
-                                        totalQuantity={obj.totalQuantity}
-                                        actualQuantity={obj.actualQuantity}
                                         isSelected={selectedIds.has(obj.id)}
                                         onMouseDown={(e) => handleBoxMouseDown(e, obj.id)}
                                         onDrag={handleDrag}

@@ -1,6 +1,6 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {
+const nextConfig: any = {
   eslint: {
     // Cảnh báo: Việc này làm Vercel bỏ qua các lỗi Eslint, giúp build thành công
     ignoreDuringBuilds: true,

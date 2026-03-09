@@ -1531,13 +1531,14 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     };
 
     return (
-        <div className="w-full h-screen bg-gray-100 relative flex overflow-hidden">
+        <div className="w-full h-full min-h-[500px] bg-gray-100 relative flex overflow-hidden">
             {/* Mobile Toggle Button (Floating) */}
             <button
                 onClick={() => setIsPanelOpen(!isPanelOpen)}
-                className="md:hidden absolute top-4 left-4 z-30 bg-white p-2 rounded shadow-md text-gray-700 hover:text-blue-600 focus:outline-none"
+                className="lg:hidden absolute top-4 left-4 z-50 bg-white/95 p-3 rounded-full shadow-lg border border-gray-200 text-blue-700 hover:bg-blue-50 focus:outline-none transition-colors"
+                title="Mở Bảng Điều Khiển"
             >
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="3" y1="12" x2="21" y2="12"></line>
                     <line x1="3" y1="6" x2="21" y2="6"></line>
                     <line x1="3" y1="18" x2="21" y2="18"></line>
@@ -1547,15 +1548,15 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             {/* Backdrop for Mobile */}
             {isPanelOpen && (
                 <div
-                    className="md:hidden fixed inset-0 bg-black/20 z-10"
+                    className="lg:hidden fixed inset-0 bg-black/40 z-30 backdrop-blur-sm"
                     onClick={() => setIsPanelOpen(false)}
                 />
             )}
 
             {/* Properties Panel - Left  */}
             <div className={`
-                absolute md:relative z-20 h-full w-72 bg-white shadow-lg overflow-auto transition-transform duration-300 ease-in-out
-                ${isPanelOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+                absolute lg:relative z-40 h-full w-72 bg-white shadow-xl border-r border-gray-200 overflow-auto transition-transform duration-300 ease-in-out
+                ${isPanelOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
             `}>
                 <div className="p-3">
                     {/* Top Actions Row */}

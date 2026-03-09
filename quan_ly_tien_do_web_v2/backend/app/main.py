@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI):
             safe_add_column(conn, "projects", "manager_id", "INTEGER")
             safe_add_column(conn, "projects", "status", "VARCHAR", "'planning'")
             safe_add_column(conn, "projects", "boq_data", "TEXT")
+            safe_add_column(conn, "projects", "map_url", "VARCHAR")
+            safe_add_column(conn, "projects", "drive_url", "VARCHAR")
+            safe_add_column(conn, "projects", "sheet_url", "VARCHAR")
             # Diagrams table
             safe_add_column(conn, "diagrams", "created_at", "TIMESTAMP")
             # Users table

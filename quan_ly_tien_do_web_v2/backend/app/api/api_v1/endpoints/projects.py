@@ -313,16 +313,14 @@ def get_project_boq_summary(
             status = 0
             entry['design_qty'] += dqty
             entry['actual_qty'] += aqty
-                entry['design_amount'] += dqty * price
-                entry['actual_amount'] += aqty * price
-                if status == 2:
-                    entry['status_counts']['done'] += 1
-                elif status == 1:
-                    entry['status_counts']['in_progress'] += 1
-                else:
-                    entry['status_counts']['todo'] += 1
-        except (json.JSONDecodeError, TypeError):
-            continue
+            entry['design_amount'] += dqty * price
+            entry['actual_amount'] += aqty * price
+            if aqty >= dqty and dqty > 0:
+                entry['status_counts']['done'] += 1
+            elif aqty > 0:
+                entry['status_counts']['in_progress'] += 1
+            else:
+                entry['status_counts']['todo'] += 1
 
     items = list(category_map.values())
     total_design = sum(i['design_amount'] for i in items)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Float
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -10,12 +10,15 @@ class Diagram(Base):
     name = Column(String, index=True)
     description = Column(String, nullable=True)
     objects = Column(Text, nullable=True)   # JSON string of objects
-    boq_data = Column(Text, nullable=True)  # JSON string of BOQ Data
     
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True) # Allow null for transition
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
+    # Cache
+    cached_progress_percent = Column(Float, nullable=True) # % tien do hoan thanh cua so do
+
     # Relationships
     project = relationship("Project", back_populates="diagrams")
+    boq_items = relationship("BOQItem", back_populates="diagram", cascade="all, delete-orphan")

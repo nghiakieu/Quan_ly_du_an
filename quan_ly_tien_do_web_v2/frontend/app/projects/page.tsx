@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText } from 'lucide-react';
-import { getProjects, createProject, deleteProject, updateProject, getProjectProgress, type Project, type ProjectProgress } from '@/lib/api';
+import { getProjects, createProject, deleteProject, updateProject, type Project } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
 
@@ -49,7 +49,6 @@ function ProjectLinkButton({ project, type, icon: Icon, colorClass, title, onUpd
 
 export default function ProjectsDashboard() {
     const [projects, setProjects] = useState<Project[]>([]);
-    const [progressMap, setProgressMap] = useState<Record<number, ProjectProgress>>({});
     const [loading, setLoading] = useState(true);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({
@@ -71,17 +70,6 @@ export default function ProjectsDashboard() {
             setLoading(true);
             const data = await getProjects();
             setProjects(data);
-            // Fetch progress for all projects
-            const progressResults: Record<number, ProjectProgress> = {};
-            for (const p of data) {
-                try {
-                    const prog = await getProjectProgress(p.id);
-                    progressResults[p.id] = prog;
-                } catch {
-                    // No progress data available
-                }
-            }
-            setProgressMap(progressResults);
         } catch (err) {
             console.error("Failed to fetch projects", err);
             toast.error("Không thể tải danh sách dự án");
@@ -273,9 +261,8 @@ export default function ProjectsDashboard() {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {projects.map((project) => {
                         const statusConfig = getStatusConfig(project.status);
-                        const progress = progressMap[project.id];
-                        const progressPercent = progress?.progress_percent ?? 0;
-                        const diagramCount = project.diagrams?.length ?? 0;
+                        const progressPercent = project.cached_progress_percent ?? 0;
+                        const diagramCount = project.cached_total_diagrams ?? (project.diagrams?.length ?? 0);
 
                         return (
                             <Link key={project.id} href={`/projects/${project.id}`}>
@@ -343,19 +330,10 @@ export default function ProjectsDashboard() {
                                                     }}
                                                 />
                                             </div>
-                                            {progress && (
-                                                <div className="flex gap-3 mt-2 text-xs text-gray-400">
+                                            {project.cached_completed_value !== undefined && project.cached_completed_value > 0 && (
+                                                <div className="flex gap-3 mt-2 text-xs font-medium text-green-600">
                                                     <span className="flex items-center gap-1">
-                                                        <span className="w-2 h-2 rounded-full bg-green-400"></span>
-                                                        {progress.completed} xong
-                                                    </span>
-                                                    <span className="flex items-center gap-1">
-                                                        <span className="w-2 h-2 rounded-full bg-blue-400"></span>
-                                                        {progress.in_progress} đang
-                                                    </span>
-                                                    <span className="flex items-center gap-1">
-                                                        <span className="w-2 h-2 rounded-full bg-gray-300"></span>
-                                                        {progress.not_started} chưa
+                                                        Giá trị: {formatCurrency(project.cached_completed_value)}
                                                     </span>
                                                 </div>
                                             )}

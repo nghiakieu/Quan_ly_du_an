@@ -92,6 +92,9 @@ export interface Project {
     manager_id?: number;
     created_at: string;
     updated_at: string;
+    cached_progress_percent?: number;
+    cached_completed_value?: number;
+    cached_total_diagrams?: number;
     diagrams: DiagramSummary[];
 }
 

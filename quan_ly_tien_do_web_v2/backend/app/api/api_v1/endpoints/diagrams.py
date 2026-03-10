@@ -2,6 +2,9 @@ from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
 from sqlalchemy.orm import Session, defer
 import asyncio
+import json
+from app.models.boq import BOQItem
+from app.utils.progress_cache import recalculate_diagram_progress, recalculate_project_progress
 
 from app.api.deps import get_db
 from app.api.api_v1.endpoints.ai import invalidate_ai_cache
@@ -28,8 +31,7 @@ def read_diagrams(
     Retrieve diagrams.
     """
     query = db.query(DiagramModel).options(
-        defer(DiagramModel.objects),
-        defer(DiagramModel.boq_data)
+        defer(DiagramModel.objects)
     )
     if project_id is not None:
         query = query.filter(DiagramModel.project_id == project_id)
@@ -47,16 +49,42 @@ def create_diagram(
     """
     Create new diagram.
     """
+    boq_str = diagram_in.boq_data
     diagram = DiagramModel(
         name=diagram_in.name,
         description=diagram_in.description,
         objects=diagram_in.objects,
-        boq_data=diagram_in.boq_data,
         project_id=diagram_in.project_id
     )
     db.add(diagram)
     db.commit()
     db.refresh(diagram)
+    
+    if boq_str:
+        try:
+            boq_list = json.loads(boq_str)
+            items = []
+            for bi in boq_list:
+                items.append(BOQItem(
+                    diagram_id=diagram.id,
+                    work_name=bi.get("name", "Unknown"),
+                    unit=bi.get("unit"),
+                    design_qty=bi.get("designQty") or 0.0,
+                    actual_qty=bi.get("actualQty") or 0.0,
+                    plan_qty=bi.get("planQty") or 0.0,
+                    price=bi.get("unitPrice") or 0.0,
+                    order=int(bi.get("order", 0)) if str(bi.get("order", "0")).isdigit() else 0,
+                    external_id=str(bi.get("id", ""))
+                ))
+            db.add_all(items)
+            db.commit()
+            recalculate_diagram_progress(db, diagram.id)
+            if diagram.project_id:
+                recalculate_project_progress(db, diagram.project_id)
+        except Exception as e:
+            print("Create Diagram parse BOQ error: ", e)
+    
+    setattr(diagram, "boq_data", boq_str)  # Transient load for Pydantic
     
     # Broadcast to websocket clients that a new diagram might be available
     background_tasks.add_task(
@@ -84,12 +112,54 @@ def update_diagram(
         raise HTTPException(status_code=404, detail="Diagram not found")
     
     update_data = diagram_in.dict(exclude_unset=True)
+    boq_str = update_data.pop("boq_data", None)
+    
     for field in update_data:
         setattr(diagram, field, update_data[field])
 
     db.add(diagram)
     db.commit()
+    
+    if boq_str is not None:
+        db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).delete()
+        try:
+            boq_list = json.loads(boq_str)
+            items = []
+            for bi in boq_list:
+                items.append(BOQItem(
+                    diagram_id=diagram.id,
+                    work_name=bi.get("name", "Unknown"),
+                    unit=bi.get("unit"),
+                    design_qty=bi.get("designQty") or 0.0,
+                    actual_qty=bi.get("actualQty") or 0.0,
+                    plan_qty=bi.get("planQty") or 0.0,
+                    price=bi.get("unitPrice") or 0.0,
+                    order=int(bi.get("order", 0)) if str(bi.get("order", "0")).isdigit() else 0,
+                    external_id=str(bi.get("id", ""))
+                ))
+            db.add_all(items)
+            db.commit()
+            recalculate_diagram_progress(db, diagram.id)
+            if diagram.project_id:
+                recalculate_project_progress(db, diagram.project_id)
+        except Exception as e:
+            print("Update Diagram parse BOQ error: ", e)
+
     db.refresh(diagram)
+    
+    # Reload items for response
+    fetched_items = db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).all()
+    boq_list_resp = []
+    for bi in fetched_items:
+        boq_list_resp.append({
+            "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+            "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+            "unitPrice": bi.price, "order": bi.order,
+            "contractAmount": round(bi.design_qty * bi.price, 2),
+            "actualAmount": round(bi.actual_qty * bi.price, 2),
+            "planAmount": round(bi.plan_qty * bi.price, 2)
+        })
+    setattr(diagram, "boq_data", json.dumps(boq_list_resp, ensure_ascii=False) if boq_list_resp else "[]")
     invalidate_ai_cache(diagram.project_id)
     
     # Phát tín hiệu báo sơ đồ có thay đổi
@@ -112,6 +182,20 @@ def read_latest_diagram(
     diagram = db.query(DiagramModel).order_by(DiagramModel.id.desc()).first()
     if not diagram:
         raise HTTPException(status_code=404, detail="No diagrams found")
+        
+    fetched_items = db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).all()
+    boq_list_resp = []
+    for bi in fetched_items:
+        boq_list_resp.append({
+            "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+            "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+            "unitPrice": bi.price, "order": bi.order,
+            "contractAmount": round(bi.design_qty * bi.price, 2),
+            "actualAmount": round(bi.actual_qty * bi.price, 2),
+            "planAmount": round(bi.plan_qty * bi.price, 2)
+        })
+    setattr(diagram, "boq_data", json.dumps(boq_list_resp, ensure_ascii=False) if boq_list_resp else "[]")
+    
     return diagram
 
 @router.get("/{diagram_id}", response_model=Diagram)
@@ -126,6 +210,20 @@ def read_diagram(
     diagram = db.query(DiagramModel).filter(DiagramModel.id == diagram_id).first()
     if not diagram:
         raise HTTPException(status_code=404, detail="Diagram not found")
+        
+    fetched_items = db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).all()
+    boq_list_resp = []
+    for bi in fetched_items:
+        boq_list_resp.append({
+            "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+            "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+            "unitPrice": bi.price, "order": bi.order,
+            "contractAmount": round(bi.design_qty * bi.price, 2),
+            "actualAmount": round(bi.actual_qty * bi.price, 2),
+            "planAmount": round(bi.plan_qty * bi.price, 2)
+        })
+    setattr(diagram, "boq_data", json.dumps(boq_list_resp, ensure_ascii=False) if boq_list_resp else "[]")
+    
     return diagram
 
 @router.delete("/{diagram_id}", response_model=Diagram)

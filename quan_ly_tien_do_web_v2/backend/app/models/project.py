@@ -26,6 +26,11 @@ class Project(Base):
     status = Column(String, default="planning") # planning, active, on_hold, completed
     boq_data = Column(Text, nullable=True)       # JSON string of master BOQ data
     
+    # Caching Progress
+    cached_progress_percent = Column(Float, nullable=True)
+    cached_completed_value = Column(Float, nullable=True)
+    cached_total_diagrams = Column(Integer, nullable=True)
+    
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 

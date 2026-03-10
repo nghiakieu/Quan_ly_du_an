@@ -85,8 +85,9 @@ def get_project_progress(
     Returns total/completed/in_progress counts and percentage.
     """
     import json
+    # Load objects without defer
     project = db.query(models.Project).options(
-        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
+        joinedload(models.Project.diagrams)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -96,22 +97,23 @@ def get_project_progress(
     in_progress = 0
     
     for diagram in project.diagrams:
-        if diagram.boq_data:
+        if diagram.objects:
             try:
-                boq = json.loads(diagram.boq_data)
-                # Support both list and dict format for backward compatibility
-                items = boq if isinstance(boq, list) else (list(boq.values()) if isinstance(boq, dict) else [])
-                for item in items:
-                    if isinstance(item, dict) and 'status' in item:
+                objects_list = json.loads(diagram.objects)
+                for item in objects_list:
+                    if isinstance(item, dict):
+                        # count elements that have a status field or represent a block
                         total += 1
-                        if item['status'] == 2:
+                        status = item.get('status', '')
+                        if status == 'completed' or status == 2:
                             completed += 1
-                        elif item['status'] == 1:
+                        elif status == 'in_progress' or status == 1:
                             in_progress += 1
             except (json.JSONDecodeError, TypeError):
                 pass
     
-    progress_percent = round((completed / total * 100), 1) if total > 0 else 0
+    # Sử dụng cache % tiến độ để phản ánh đúng khối lượng tiền, không chỉ đếm số khối geometry
+    progress_percent = project.cached_progress_percent or 0.0
     
     return {
         "project_id": project_id,
@@ -198,34 +200,29 @@ def get_project_report(
 
     for diagram in project.diagrams:
         boq_items = []
-        if diagram.boq_data:
-            try:
-                boq = json.loads(diagram.boq_data)
-                if isinstance(boq, list):
-                    for item in boq:
-                        design_amount = (item.get('designQty') or 0) * (item.get('unitPrice') or 0)
-                        actual_amount = (item.get('actualQty') or 0) * (item.get('unitPrice') or 0)
-                        status = item.get('status', 0)
-                        boq_items.append({
-                            'code': item.get('code', ''),
-                            'name': item.get('name', item.get('categoryName', '')),
-                            'unit': item.get('unit', ''),
-                            'design_qty': item.get('designQty', 0),
-                            'actual_qty': item.get('actualQty', 0),
-                            'unit_price': item.get('unitPrice', 0),
-                            'design_amount': design_amount,
-                            'actual_amount': actual_amount,
-                            'status': status,
-                        })
-                        total_design += design_amount
-                        total_actual += actual_amount
-                        total_blocks += 1
-                        if status == 2:
-                            total_completed += 1
-                        elif status == 1:
-                            total_in_progress += 1
-            except (json.JSONDecodeError, TypeError):
-                pass
+        db_items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == diagram.id).all()
+        for item in db_items:
+            design_amount = item.design_qty * item.price
+            actual_amount = item.actual_qty * item.price
+            
+            boq_items.append({
+                'code': item.external_id,
+                'name': item.work_name,
+                'unit': item.unit,
+                'design_qty': item.design_qty,
+                'actual_qty': item.actual_qty,
+                'unit_price': item.price,
+                'design_amount': design_amount,
+                'actual_amount': actual_amount,
+                'status': 0, # Legacy
+            })
+            total_design += design_amount
+            total_actual += actual_amount
+            total_blocks += 1
+            if item.actual_qty >= item.design_qty and item.design_qty > 0:
+                total_completed += 1
+            elif item.actual_qty > 0:
+                total_in_progress += 1
 
         diagrams_report.append({
             'id': diagram.id,
@@ -294,33 +291,28 @@ def get_project_boq_summary(
     category_map: dict = {}
 
     for diagram in project.diagrams:
-        if not diagram.boq_data:
-            continue
-        try:
-            boq = json.loads(diagram.boq_data)
-            if not isinstance(boq, list):
-                continue
-            for item in boq:
-                cat = item.get('categoryName') or item.get('name', 'Khác')
-                unit = item.get('unit', '')
-                if cat not in category_map:
-                    category_map[cat] = {
-                        'category': cat,
-                        'unit': unit,
-                        'design_qty': 0.0,
-                        'actual_qty': 0.0,
-                        'design_amount': 0.0,
-                        'actual_amount': 0.0,
-                        'unit_price': item.get('unitPrice', 0),
-                        'status_counts': {'done': 0, 'in_progress': 0, 'todo': 0},
-                    }
-                entry = category_map[cat]
-                dqty = item.get('designQty') or 0
-                aqty = item.get('actualQty') or 0
-                price = item.get('unitPrice') or 0
-                status = item.get('status', 0)
-                entry['design_qty'] += dqty
-                entry['actual_qty'] += aqty
+        db_items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == diagram.id).all()
+        for item in db_items:
+            cat = item.work_name
+            unit = item.unit
+            if cat not in category_map:
+                category_map[cat] = {
+                    'category': cat,
+                    'unit': unit,
+                    'design_qty': 0.0,
+                    'actual_qty': 0.0,
+                    'design_amount': 0.0,
+                    'actual_amount': 0.0,
+                    'unit_price': item.price,
+                    'status_counts': {'done': 0, 'in_progress': 0, 'todo': 0},
+                }
+            entry = category_map[cat]
+            dqty = item.design_qty or 0.0
+            aqty = item.actual_qty or 0.0
+            price = item.price or 0.0
+            status = 0
+            entry['design_qty'] += dqty
+            entry['actual_qty'] += aqty
                 entry['design_amount'] += dqty * price
                 entry['actual_amount'] += aqty * price
                 if status == 2:
@@ -389,20 +381,13 @@ def get_project_boq(
     boq_map = {normalize_id(item.get('id', '')): item for item in boq}
     
     for diagram in project.diagrams:
-        if not diagram.boq_data:
-            continue
-        try:
-            diag_boq = json.loads(diagram.boq_data)
-            if not isinstance(diag_boq, list):
-                continue
-            for item in diag_boq:
-                item_id = normalize_id(item.get('id', ''))
-                if item_id in boq_map:
-                    base_item = boq_map[item_id]
-                    base_item['actualQty'] = base_item.get('actualQty', 0) + (item.get('actualQty') or 0)
-                    base_item['planQty'] = base_item.get('planQty', 0) + (item.get('planQty') or 0)
-        except (json.JSONDecodeError, TypeError):
-            pass
+        db_items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == diagram.id).all()
+        for item in db_items:
+            item_id = normalize_id(item.external_id)
+            if item_id in boq_map:
+                base_item = boq_map[item_id]
+                base_item['actualQty'] = base_item.get('actualQty', 0) + (item.actual_qty or 0)
+                base_item['planQty'] = base_item.get('planQty', 0) + (item.plan_qty or 0)
             
     # Recalculate amounts
     for item in boq:
@@ -660,8 +645,38 @@ async def sync_diagram_boq(
         boq_item["actualAmount"] = round(boq_item["actualQty"] * unit_price, 2)
         boq_items.append(boq_item)
     
-    # Update diagram.boq_data
-    diagram.boq_data = json.dumps(boq_items, ensure_ascii=False)
+    # Delete old boq items
+    from app.models.boq import BOQItem
+    from app.utils.progress_cache import recalculate_diagram_progress, recalculate_project_progress
+    
+    db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).delete()
+    
+    # Insert new DB items
+    new_db_items = []
+    for bi in boq_items:
+        try:
+            ord_val = int(bi.get("order", 0)) if str(bi.get("order", "0")).isdigit() else 0
+        except:
+            ord_val = 0
+            
+        new_db_items.append(BOQItem(
+            diagram_id=diagram.id,
+            work_name=bi["name"],
+            unit=bi["unit"],
+            design_qty=bi["designQty"],
+            actual_qty=bi["actualQty"],
+            plan_qty=bi["planQty"],
+            price=bi["unitPrice"],
+            order=ord_val,
+            external_id=str(bi["id"])
+        ))
+    if new_db_items:
+        db.add_all(new_db_items)
+        db.commit()
+    
+    # Recalculate Cache after commit
+    recalculate_diagram_progress(db, diagram.id)
+    recalculate_project_progress(db, project_id)
     
     # Update objects with boqIds mapping
     for obj in objects_list:

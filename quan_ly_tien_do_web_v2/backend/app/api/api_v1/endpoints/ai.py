@@ -11,6 +11,7 @@ from datetime import datetime
 from app.api.deps import get_db
 from app.models.diagram import Diagram as DiagramModel
 from app.models.project import Project as ProjectModel
+from app.models.boq import BOQItem as BOQItemModel
 from app.models.task import Task as TaskModel
 from app.api import deps
 from app.models.user import User
@@ -365,7 +366,17 @@ def get_summarized_context(
         for diagram in diagrams:
             try:
                 objects = json.loads(diagram.objects) if diagram.objects else []
-                boq_data = json.loads(diagram.boq_data) if diagram.boq_data else []
+                
+                db_items = db.query(BOQItemModel).filter(BOQItemModel.diagram_id == diagram.id).all()
+                boq_data = [{
+                    'id': str(bi.external_id),
+                    'name': bi.work_name,
+                    'unit': bi.unit,
+                    'designQty': bi.design_qty,
+                    'actualQty': bi.actual_qty,
+                    'planQty': bi.plan_qty,
+                    'unitPrice': bi.price,
+                } for bi in db_items]
 
                 analysis = _process_diagram_objects(objects, boq_data)
                 boq_summary = _process_boq_top_items(boq_data)

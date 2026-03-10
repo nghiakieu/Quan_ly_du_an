@@ -48,8 +48,14 @@ async def lifespan(app: FastAPI):
         safe_add_column(engine, "projects", "map_url", "VARCHAR")
         safe_add_column(engine, "projects", "drive_url", "VARCHAR")
         safe_add_column(engine, "projects", "sheet_url", "VARCHAR")
+        # Projects cache phase 1
+        safe_add_column(engine, "projects", "cached_progress_percent", "FLOAT")
+        safe_add_column(engine, "projects", "cached_completed_value", "FLOAT")
+        safe_add_column(engine, "projects", "cached_total_diagrams", "INTEGER")
+        
         # Diagrams table
         safe_add_column(engine, "diagrams", "created_at", "TIMESTAMP")
+        safe_add_column(engine, "diagrams", "cached_progress_percent", "FLOAT")
         # Users table
         safe_add_column(engine, "users", "reset_token", "VARCHAR")
         safe_add_column(engine, "users", "reset_token_expire", "TIMESTAMP")

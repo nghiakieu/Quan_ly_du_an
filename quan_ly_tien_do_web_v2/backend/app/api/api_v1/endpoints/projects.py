@@ -24,6 +24,7 @@ def read_projects(
     Eager-loads diagrams for progress calculation.
     """
     query = db.query(models.Project).options(
+        defer(models.Project.boq_data),
         joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     )
     if status:
@@ -67,6 +68,7 @@ def read_project(
     Get project by ID with diagrams list.
     """
     project = db.query(models.Project).options(
+        defer(models.Project.boq_data),
         joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     ).filter(models.Project.id == project_id).first()
     if not project:
@@ -86,7 +88,8 @@ def get_project_progress(
     import json
     # Load objects without defer
     project = db.query(models.Project).options(
-        joinedload(models.Project.diagrams)
+        defer(models.Project.boq_data),
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -95,21 +98,9 @@ def get_project_progress(
     completed = 0
     in_progress = 0
     
-    for diagram in project.diagrams:
-        if diagram.objects:
-            try:
-                objects_list = json.loads(diagram.objects)
-                for item in objects_list:
-                    if isinstance(item, dict):
-                        # count elements that have a status field or represent a block
-                        total += 1
-                        status = item.get('status', '')
-                        if status == 'completed' or status == 2:
-                            completed += 1
-                        elif status == 'in_progress' or status == 1:
-                            in_progress += 1
-            except (json.JSONDecodeError, TypeError):
-                pass
+    # Chúng ta đã loại bỏ việc Parse JSON Canvas Objects để đếm thủ công. 
+    # Thay vào đó, Dữ liệu đã được hệ thống Cache qua Trigger xuống Project/Diagram.
+    # Count ở đây trả về 0 bảo lưu API structure cũ cho React không bị lỗi.
     
     # Sử dụng cache % tiến độ để phản ánh đúng khối lượng tiền, không chỉ đếm số khối geometry
     progress_percent = project.cached_progress_percent or 0.0
@@ -282,7 +273,8 @@ def get_project_boq_summary(
     import json
 
     project = db.query(models.Project).options(
-        joinedload(models.Project.diagrams)
+        defer(models.Project.boq_data),
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

@@ -1,6 +1,6 @@
 from typing import Any, List
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect, BackgroundTasks
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 import asyncio
 
 from app.api.deps import get_db
@@ -27,7 +27,10 @@ def read_diagrams(
     """
     Retrieve diagrams.
     """
-    query = db.query(DiagramModel)
+    query = db.query(DiagramModel).options(
+        defer(DiagramModel.objects),
+        defer(DiagramModel.boq_data)
+    )
     if project_id is not None:
         query = query.filter(DiagramModel.project_id == project_id)
     diagrams = query.offset(skip).limit(limit).all()

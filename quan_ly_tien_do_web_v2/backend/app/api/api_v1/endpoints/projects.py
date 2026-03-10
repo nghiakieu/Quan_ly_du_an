@@ -1,6 +1,6 @@
 from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, defer
 
 from app.api.deps import get_db
 from app import models, schemas
@@ -23,7 +23,10 @@ def read_projects(
     Retrieve projects with optional status filter.
     Eager-loads diagrams for progress calculation.
     """
-    query = db.query(models.Project).options(joinedload(models.Project.diagrams))
+    query = db.query(models.Project).options(
+        defer(models.Project.boq_data),
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects).defer(models.Diagram.boq_data)
+    )
     if status:
         query = query.filter(models.Project.status == status)
     projects = query.offset(skip).limit(limit).all()
@@ -65,7 +68,7 @@ def read_project(
     Get project by ID with diagrams list.
     """
     project = db.query(models.Project).options(
-        joinedload(models.Project.diagrams)
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects).defer(models.Diagram.boq_data)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
@@ -83,7 +86,7 @@ def get_project_progress(
     """
     import json
     project = db.query(models.Project).options(
-        joinedload(models.Project.diagrams)
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

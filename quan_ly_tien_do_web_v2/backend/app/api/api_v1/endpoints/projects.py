@@ -24,8 +24,7 @@ def read_projects(
     Eager-loads diagrams for progress calculation.
     """
     query = db.query(models.Project).options(
-        defer(models.Project.boq_data),
-        joinedload(models.Project.diagrams).defer(models.Diagram.objects).defer(models.Diagram.boq_data)
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     )
     if status:
         query = query.filter(models.Project.status == status)
@@ -68,7 +67,7 @@ def read_project(
     Get project by ID with diagrams list.
     """
     project = db.query(models.Project).options(
-        joinedload(models.Project.diagrams).defer(models.Diagram.objects).defer(models.Diagram.boq_data)
+        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

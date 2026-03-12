@@ -1,6 +1,9 @@
+import json
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
+from jose import jwt, JWTError
+from app.schemas.token import TokenPayload
 from app.api.api_v1.api import api_router
 from app.core.config import settings
 from app.api.ws_manager import manager
@@ -11,56 +14,9 @@ import app.models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Auto-migration on startup:
-    1. Create any missing tables (tasks, project_users, etc.)
-    2. Add missing columns to existing tables (ALTER TABLE IF NOT EXISTS)
-    """
-    from sqlalchemy import text
-
-    # Step 1: Create all missing tables
+    # DB Migrations should be handled via Alembic in Phase 2
+    # Base.metadata.create_all is kept for basic table creation until Alembic is fully configured.
     Base.metadata.create_all(bind=engine, checkfirst=True)
-
-    # Step 2: ALTER TABLE - add missing columns (compatible with both SQLite and PostgreSQL)
-    def safe_add_column(engine_inst, table, column, col_type, default=None):
-        """Add a column if it doesn't already exist. Works for both SQLite and PostgreSQL."""
-        try:
-            from sqlalchemy import text as sa_text, inspect as sa_inspect
-            inspector = sa_inspect(engine_inst)
-            existing_cols = [c["name"] for c in inspector.get_columns(table)]
-            if column not in existing_cols:
-                default_clause = f" DEFAULT {default}" if default else ""
-                with engine_inst.begin() as conn:
-                    conn.execute(sa_text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}{default_clause}"))
-                    print(f"[Migration] Added column {column} to {table}")
-        except Exception as e:
-            print(f"[Migration] Skipped adding {column} to {table}: {e}")
-
-    try:
-        # Projects table
-        safe_add_column(engine, "projects", "investor", "TEXT")
-        safe_add_column(engine, "projects", "total_budget", "FLOAT")
-        safe_add_column(engine, "projects", "start_date", "TIMESTAMP")
-        safe_add_column(engine, "projects", "end_date", "TIMESTAMP")
-        safe_add_column(engine, "projects", "manager_id", "INTEGER")
-        safe_add_column(engine, "projects", "status", "VARCHAR", "'planning'")
-        safe_add_column(engine, "projects", "boq_data", "TEXT")
-        safe_add_column(engine, "projects", "map_url", "VARCHAR")
-        safe_add_column(engine, "projects", "drive_url", "VARCHAR")
-        safe_add_column(engine, "projects", "sheet_url", "VARCHAR")
-        # Projects cache phase 1
-        safe_add_column(engine, "projects", "cached_progress_percent", "FLOAT")
-        safe_add_column(engine, "projects", "cached_completed_value", "FLOAT")
-        safe_add_column(engine, "projects", "cached_total_diagrams", "INTEGER")
-        
-        # Diagrams table
-        safe_add_column(engine, "diagrams", "created_at", "TIMESTAMP")
-        safe_add_column(engine, "diagrams", "cached_progress_percent", "FLOAT")
-        # Users table
-        safe_add_column(engine, "users", "reset_token", "VARCHAR")
-        safe_add_column(engine, "users", "reset_token_expire", "TIMESTAMP")
-    except Exception as e:
-        print(f"[Migration] Top level migration error: {e}")
 
     # Step 3: Create Default Admin Account if not exists
     from app.db.database import SessionLocal
@@ -75,7 +31,7 @@ async def lifespan(app: FastAPI):
             default_admin = UserModel(
                 username="NghiaKieu",
                 email="kieulinhnghia@gmail.com",
-                hashed_password=get_password_hash("kieulinhnghia"),
+                hashed_password=get_password_hash(settings.DEFAULT_ADMIN_PASSWORD),
                 role="admin",
                 is_active=True
             )
@@ -112,14 +68,32 @@ def root():
     return {"message": "Welcome to Quan Ly Du An API"}
 
 @app.websocket("/api/v1/diagrams/ws/{diagram_id}")
-async def websocket_diagram_endpoint(websocket: WebSocket, diagram_id: str):
+async def websocket_diagram_endpoint(websocket: WebSocket, diagram_id: str, token: str = Query(None)):
     """
     Kênh WebSocket cho Client.
-    Đưa trực tiếp vào main.py để tránh lỗi 404 do APIRouter prefix chặn connection.
+    Yêu cầu token JWT qua query parameters.
     """
-    await manager.connect(diagram_id, websocket)
+    if not token:
+        await websocket.close(code=1008)
+        return
+        
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        token_data = TokenPayload(**payload)
+        if not token_data.sub:
+            raise JWTError()
+    except JWTError:
+        await websocket.close(code=1008)
+        return
+
+    await manager.connect_diagram(diagram_id, websocket)
     try:
         while True:
-            data = await websocket.receive_text() 
+            raw = await websocket.receive_text()
+            try:
+                data = json.loads(raw)
+                await manager.broadcast_to_diagram(diagram_id, data, exclude=websocket)
+            except json.JSONDecodeError:
+                pass
     except WebSocketDisconnect:
-        manager.disconnect(diagram_id, websocket)
+        manager.disconnect_diagram(diagram_id, websocket)

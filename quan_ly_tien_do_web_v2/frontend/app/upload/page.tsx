@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { uploadExcel } from '@/lib/api';
+import { uploadExcel, extractErrorMessage } from '@/lib/api';
 import { Upload, FileSpreadsheet, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -65,7 +65,8 @@ export default function UploadPage() {
             console.error('Upload error:', error);
             console.error('Error response:', error.response);
 
-            const errorMessage = error.response?.data?.detail || error.response?.data?.message || error.message || 'Có lỗi xảy ra khi upload file';
+            const detailError = extractErrorMessage(error.response?.data?.detail);
+            const errorMessage = detailError || error.response?.data?.message || error.message || 'Có lỗi xảy ra khi upload file';
             toast.error(errorMessage);
             setResult({ status: 'error', message: errorMessage });
         } finally {

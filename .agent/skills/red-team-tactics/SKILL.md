@@ -1,9 +1,7 @@
 ---
 name: red-team-tactics
-description: Red team tactics principles based on MITRE ATT&CK.
-category: security
-version: 4.0.5
-layer: master-skill
+description: Red team tactics principles based on MITRE ATT&CK. Attack phases, detection evasion, reporting.
+allowed-tools: Read, Glob, Grep
 ---
 
 # Red Team Tactics

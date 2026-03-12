@@ -7,7 +7,7 @@ import StatusPieChart from './StatusPieChart';
 import ProgressDashboard from './ProgressDashboard';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth';
-import { syncDiagramBOQ } from '@/lib/api';
+import { syncDiagramBOQ, extractErrorMessage } from '@/lib/api';
 import BOQSyncReport from '../BOQSyncReport';
 import { toast } from 'sonner';
 
@@ -1057,7 +1057,8 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             }
         } catch (error: any) {
             console.error('BOQ Sync Error:', error);
-            const msg = error.response?.data?.detail || 'Lỗi khi đồng bộ BOQ';
+            const detailError = extractErrorMessage(error.response?.data?.detail);
+            const msg = detailError || error.response?.data?.message || error.message || 'Lỗi khi đồng bộ BOQ';
             toast.error(msg);
             alert(msg);
         } finally {
@@ -1176,10 +1177,10 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const [syncMessage, setSyncMessage] = useState<string | null>(null);
     const isFirstLoad = React.useRef(true);
 
-    // Use custom env or fallback to localhost
+    // Use custom env or fallback to /api/v1 (goes through Next.js proxy)
     const API_URL = process.env.NEXT_PUBLIC_API_URL
         ? `${process.env.NEXT_PUBLIC_API_URL}/diagrams`
-        : 'http://localhost:8002/api/v1/diagrams';
+        : '/api/v1/diagrams';
 
     const fetchDiagramData = async () => {
         try {
@@ -1302,6 +1303,13 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             return;
         }
 
+        // Check auth token before attempting save - skip if not logged in
+        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+        if (!token) {
+            // Not logged in - don't attempt save to avoid 401 errors
+            return;
+        }
+
         setSaveStatus('saving');
 
         const timer = setTimeout(async () => {
@@ -1318,11 +1326,9 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             }
 
             try {
-                // Get token from localStorage since it's client side
-                const token = localStorage.getItem('access_token');
                 const headers = {
                     'Content-Type': 'application/json',
-                    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+                    'Authorization': `Bearer ${token}`
                 };
 
                 let res;
@@ -1352,7 +1358,9 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     };
                     setSaveStatus('saved');
                 } else {
-                    console.error("Auto-save failed with status", res.status);
+                    if (res.status !== 401) {
+                        console.error("Auto-save failed with status", res.status);
+                    }
                     setSaveStatus('error');
                 }
             } catch (err) {
@@ -1647,105 +1655,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                             {saveStatus === 'error' && <span className="text-red-500">⚠ Lỗi lưu</span>}
                             {saveStatus === 'idle' && <span className="text-gray-400">-</span>}
                         </div>
-                    </div>                    {/* BOQ Modal */}
-                    {showBOQModal && (
-                        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-10">
-                            <div className="bg-white rounded-lg shadow-xl w-full max-w-6xl h-5/6 flex flex-col">
-                                <div className="p-4 border-b flex justify-between items-center">
-                                    <h3 className="text-lg font-bold">Master BOQ Data ({boqData.length} items)</h3>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={handleExportBOQ}
-                                            className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm flex items-center gap-1"
-                                            title="Download Excel"
-                                        >
-                                            💾 Export Excel
-                                        </button>
-                                        <button
-                                            onClick={() => setShowBOQModal(false)}
-                                            className="text-gray-500 hover:text-red-500 text-2xl font-bold ml-2"
-                                        >
-                                            &times;
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex-1 overflow-auto bg-white relative">
-                                    <table className="w-full text-xs border-collapse border border-gray-300">
-                                        <thead className="bg-gray-100 text-gray-700 sticky top-0 z-20 shadow-sm">
-                                            <tr>
-                                                <th className="border p-2 bg-gray-100 text-left w-24">Mã hiệu</th>
-                                                <th className="border p-2 bg-gray-100 text-center w-12">TT</th>
-                                                <th className="border p-2 bg-gray-100">Nội dung công việc</th>
-                                                <th className="border p-2 bg-gray-100">ĐVT</th>
-                                                <th className="border p-2 bg-gray-100">KL Tkế</th>
-                                                <th className="border p-2 bg-gray-100">KL THiện</th>
-                                                <th className="border p-2 bg-gray-100">KL KHoạch</th>
-                                                <th className="border p-2 bg-gray-100">Đơn giá</th>
-                                                <th className="border p-2 bg-gray-100">Giá trị HĐ</th>
-                                                <th className="border p-2 bg-gray-100">GT THiện</th>
-                                                <th className="border p-2 bg-gray-100">GT KHoạch</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {boqData.map((item, index) => (
-                                                <tr key={index} className="hover:bg-gray-50">
-                                                    <td className="border p-1 font-mono text-gray-500">{item.id}</td>
-                                                    <td className="border p-1 text-center font-semibold text-gray-600">{item.order}</td>
-                                                    <td className="border p-1">{item.name}</td>
-                                                    <td className="border p-1 text-center">{item.unit}</td>
-                                                    <td className="border p-1 text-right">
-                                                        {item.designQty?.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="border p-1 text-right font-semibold text-blue-600">
-                                                        {item.actualQty?.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="border p-1 text-right text-orange-600">
-                                                        {item.planQty?.toLocaleString('en-US', { maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="border p-1 text-right">
-                                                        {item.unitPrice?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="border p-1 text-right">
-                                                        {item.contractAmount?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="border p-1 text-right font-bold text-green-600">
-                                                        {item.actualAmount?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                    <td className="border p-1 text-right text-orange-600 font-bold">
-                                                        {item.planAmount?.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            {/* Final Total Row */}
-                                            <tr className="bg-gray-200 font-bold sticky bottom-0 z-20 shadow-inner">
-                                                <td colSpan={4} className="border p-2 text-center bg-gray-200">TỔNG CỘNG</td>
-                                                <td className="border p-2 text-right bg-gray-200">
-                                                    {boqData.reduce((sum, item) => sum + (item.designQty || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </td>
-                                                <td className="border p-2 text-right text-blue-700 bg-gray-200">
-                                                    {boqData.reduce((sum, item) => sum + (item.actualQty || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </td>
-                                                <td className="border p-2 text-right text-orange-700 bg-gray-200">
-                                                    {boqData.reduce((sum, item) => sum + (item.planQty || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                </td>
-                                                <td className="border p-2 text-right bg-gray-200"></td>
-                                                <td className="border p-2 text-right text-black bg-gray-200">
-                                                    {boqData.reduce((sum, item) => sum + (item.contractAmount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                </td>
-                                                <td className="border p-2 text-right text-green-700 bg-gray-200">
-                                                    {boqData.reduce((sum, item) => sum + (item.actualAmount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                </td>
-                                                <td className="border p-2 text-right text-orange-700 bg-gray-200">
-                                                    {boqData.reduce((sum, item) => sum + (item.planAmount || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
-                                                </td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
+                    </div>
 
                     {/* Add Buttons */}
                     {isAuthorized && (
@@ -2536,6 +2446,82 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                 onClose={() => setShowSyncReport(false)}
                 reportData={syncReport}
             />
+
+            {/* BOQ Modal - Rendered at root level for proper fullscreen display */}
+            {showBOQModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 sm:p-8">
+                    <div className="bg-white rounded-xl shadow-2xl w-full h-full max-w-[98vw] max-h-[95vh] flex flex-col">
+                        <div className="px-5 py-3.5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
+                            <div>
+                                <h3 className="text-base font-bold text-gray-900">📄 Bảng BOQ Chi tiết</h3>
+                                <p className="text-xs text-gray-500 mt-0.5">{boqData.length} hạng mục</p>
+                            </div>
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleExportBOQ}
+                                    className="px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 font-semibold text-sm flex items-center gap-1.5 transition-colors"
+                                    title="Xuất Excel"
+                                >
+                                    💾 Xuất Excel
+                                </button>
+                                <button
+                                    onClick={() => setShowBOQModal(false)}
+                                    className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-semibold text-sm transition-colors"
+                                >
+                                    × Đóng
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 overflow-auto">
+                            <table className="w-full text-xs border-collapse">
+                                <thead className="bg-gray-100 text-gray-700 sticky top-0 z-20 shadow-sm">
+                                    <tr>
+                                        <th className="border border-gray-200 px-3 py-2 text-left font-semibold bg-gray-100">Mã hiệu</th>
+                                        <th className="border border-gray-200 px-2 py-2 text-center font-semibold bg-gray-100 w-10">TT</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-left font-semibold bg-gray-100">Nội dung công việc</th>
+                                        <th className="border border-gray-200 px-2 py-2 text-center font-semibold bg-gray-100 w-12">ĐVT</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-blue-50 text-blue-700">KL Thiết kế</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-green-50 text-green-700">KL Thực hiện</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-orange-50 text-orange-700">KL Kế hoạch</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-gray-100">Đơn giá</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-gray-100">GT Hợp đồng</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-green-50 text-green-700">GT Thực hiện</th>
+                                        <th className="border border-gray-200 px-3 py-2 text-right font-semibold bg-orange-50 text-orange-700">GT Kế hoạch</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {boqData.map((item, index) => (
+                                        <tr key={index} className={`hover:bg-blue-50/40 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                                            <td className="border border-gray-100 px-3 py-2 font-mono text-gray-500">{item.id}</td>
+                                            <td className="border border-gray-100 px-2 py-2 text-center font-medium text-gray-600">{item.order}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-gray-900">{item.name}</td>
+                                            <td className="border border-gray-100 px-2 py-2 text-center text-gray-600">{item.unit}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right text-blue-700">{item.designQty?.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right font-semibold text-green-700">{item.actualQty?.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right text-orange-600">{item.planQty?.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right text-gray-600">{item.unitPrice?.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right text-gray-700">{item.contractAmount?.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right font-bold text-green-700">{item.actualAmount?.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                                            <td className="border border-gray-100 px-3 py-2 text-right font-bold text-orange-600">{item.planAmount?.toLocaleString('en-US', { maximumFractionDigits: 0 })}</td>
+                                        </tr>
+                                    ))}
+                                    {/* Total Row */}
+                                    <tr className="bg-gray-800 text-white font-bold sticky bottom-0">
+                                        <td colSpan={4} className="border border-gray-600 px-3 py-2.5 text-center">TỔNG CỘNG</td>
+                                        <td className="border border-gray-600 px-3 py-2.5 text-right">{boqData.reduce((s,i) => s+(i.designQty||0),0).toLocaleString('en-US',{maximumFractionDigits:2})}</td>
+                                        <td className="border border-gray-600 px-3 py-2.5 text-right text-green-300">{boqData.reduce((s,i) => s+(i.actualQty||0),0).toLocaleString('en-US',{maximumFractionDigits:2})}</td>
+                                        <td className="border border-gray-600 px-3 py-2.5 text-right text-orange-300">{boqData.reduce((s,i) => s+(i.planQty||0),0).toLocaleString('en-US',{maximumFractionDigits:2})}</td>
+                                        <td className="border border-gray-600 px-3 py-2.5"></td>
+                                        <td className="border border-gray-600 px-3 py-2.5 text-right">{boqData.reduce((s,i) => s+(i.contractAmount||0),0).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                                        <td className="border border-gray-600 px-3 py-2.5 text-right text-green-300">{boqData.reduce((s,i) => s+(i.actualAmount||0),0).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                                        <td className="border border-gray-600 px-3 py-2.5 text-right text-orange-300">{boqData.reduce((s,i) => s+(i.planAmount||0),0).toLocaleString('en-US',{maximumFractionDigits:0})}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

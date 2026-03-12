@@ -3,10 +3,14 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText } from 'lucide-react';
-import { getProjects, createProject, deleteProject, updateProject, type Project } from '@/lib/api';
+import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText, Users, Upload, ListTodo, X } from 'lucide-react';
+import { getProjects, createProject, deleteProject, updateProject, extractErrorMessage, type Project } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
+import ProjectMembers from '@/components/ProjectMembers';
+import ProjectBOQUpload from '@/components/ProjectBOQUpload';
+import ProjectBOQViewer from '@/components/ProjectBOQViewer';
+
 
 function ProjectLinkButton({ project, type, icon: Icon, colorClass, title, onUpdate }: { project: Project, type: 'map' | 'drive' | 'sheet', icon: any, colorClass: string, title: string, onUpdate: () => void }) {
     const link = type === 'map' ? project.map_url : (type === 'drive' ? project.drive_url : project.sheet_url);
@@ -61,6 +65,11 @@ export default function ProjectsDashboard() {
     });
     const { isAuthenticated, user } = useAuth();
 
+    // Modal states for members and BOQ
+    const [membersProjectId, setMembersProjectId] = useState<number | null>(null);
+    const [boqUploadProjectId, setBoqUploadProjectId] = useState<number | null>(null);
+    const [boqViewerProjectId, setBoqViewerProjectId] = useState<number | null>(null);
+
     useEffect(() => {
         fetchProjects();
     }, []);
@@ -70,9 +79,9 @@ export default function ProjectsDashboard() {
             setLoading(true);
             const data = await getProjects();
             setProjects(data);
-        } catch (err) {
+        } catch (err: unknown) {
             console.error("Failed to fetch projects", err);
-            toast.error("Không thể tải danh sách dự án");
+            toast.error(extractErrorMessage(err, "Không thể tải danh sách dự án. Kiểm tra Backend đã chạy trên port 8000 chưa."));
         } finally {
             setLoading(false);
         }
@@ -94,8 +103,8 @@ export default function ProjectsDashboard() {
             setFormData({ name: '', description: '', investor: '', total_budget: '', start_date: '', end_date: '' });
             setShowForm(false);
             fetchProjects();
-        } catch (err) {
-            toast.error("Không thể tạo dự án. Vui lòng đăng nhập.");
+        } catch (err: unknown) {
+            toast.error(extractErrorMessage(err, "Không thể tạo dự án. Vui lòng đăng nhập."));
         }
     };
 
@@ -150,7 +159,7 @@ export default function ProjectsDashboard() {
                     <h1 className="text-2xl font-bold text-gray-900">Danh mục Dự án</h1>
                     <p className="text-sm text-gray-500 mt-1">{projects.length} dự án</p>
                 </div>
-                {isAuthenticated && (
+                {user?.role === 'admin' && (
                     <button
                         onClick={() => setShowForm(!showForm)}
                         className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-all shadow-sm hover:shadow-md"
@@ -265,53 +274,100 @@ export default function ProjectsDashboard() {
                         const diagramCount = project.cached_total_diagrams ?? (project.diagrams?.length ?? 0);
 
                         return (
-                            <Link key={project.id} href={`/projects/${project.id}`}>
-                                <Card className="group hover:shadow-xl transition-all duration-300 cursor-pointer border-gray-200 hover:border-blue-300 h-full flex flex-col">
-                                    <CardHeader className="pb-3">
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2">
+                            <Card key={project.id} className="group hover:shadow-xl transition-all duration-300 cursor-pointer border-gray-200 hover:border-blue-300 h-full flex flex-col">
+                                <CardHeader className="pb-3">
+                                    <div className="flex items-start justify-between">
+                                        <div className="flex-1 min-w-0">
+                                            {/* Row 1: Tên dự án + icons hành động */}
+                                            <div className="flex items-center gap-2">
+                                                <Link href={`/projects/${project.id}`} className="flex-1 min-w-0">
                                                     <CardTitle className="text-base font-semibold text-gray-900 group-hover:text-blue-700 transition-colors truncate">
                                                         {project.name}
                                                     </CardTitle>
-                                                    <div className="flex items-center gap-1.5 flex-shrink-0">
-                                                        <ProjectLinkButton
-                                                            project={project}
-                                                            type="map"
-                                                            icon={Globe}
-                                                            colorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
-                                                            title="Bản đồ"
-                                                            onUpdate={fetchProjects}
-                                                        />
-                                                        <ProjectLinkButton
-                                                            project={project}
-                                                            type="drive"
-                                                            icon={FolderOpen}
-                                                            colorClass="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
-                                                            title="Hồ sơ Drive"
-                                                            onUpdate={fetchProjects}
-                                                        />
-                                                        <ProjectLinkButton
-                                                            project={project}
-                                                            type="sheet"
-                                                            icon={BookOpenText}
-                                                            colorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
-                                                            title="Nhật ký Báo cáo"
-                                                            onUpdate={fetchProjects}
-                                                        />
-                                                    </div>
+                                                </Link>
+                                                {/* Action icons on same row as project name */}
+                                                <div className="flex items-center gap-1 flex-shrink-0">
+                                                    {/* Link icons */}
+                                                    <ProjectLinkButton
+                                                        project={project}
+                                                        type="map"
+                                                        icon={Globe}
+                                                        colorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
+                                                        title="Bản đồ"
+                                                        onUpdate={fetchProjects}
+                                                    />
+                                                    <ProjectLinkButton
+                                                        project={project}
+                                                        type="drive"
+                                                        icon={FolderOpen}
+                                                        colorClass="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
+                                                        title="Hồ sơ Drive"
+                                                        onUpdate={fetchProjects}
+                                                    />
+                                                    <ProjectLinkButton
+                                                        project={project}
+                                                        type="sheet"
+                                                        icon={BookOpenText}
+                                                        colorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
+                                                        title="Nhật ký Báo cáo"
+                                                        onUpdate={fetchProjects}
+                                                    />
+                                                    {/* BOQ Upload icon - Admin only */}
+                                                    {user?.role === 'admin' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setBoqUploadProjectId(project.id);
+                                                            }}
+                                                            className="p-1.5 rounded-full text-green-600 bg-green-50 hover:bg-green-100 transition-colors border border-transparent"
+                                                            title="Upload BOQ"
+                                                        >
+                                                            <Upload className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+                                                    {/* BOQ View icon - Admin only */}
+                                                    {user?.role === 'admin' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setBoqViewerProjectId(project.id);
+                                                            }}
+                                                            className="p-1.5 rounded-full text-blue-600 bg-blue-50 hover:bg-blue-100 transition-colors border border-transparent"
+                                                            title="Xem BOQ"
+                                                        >
+                                                            <ListTodo className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+                                                    {/* Members icon - Admin only */}
+                                                    {user?.role === 'admin' && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.preventDefault();
+                                                                e.stopPropagation();
+                                                                setMembersProjectId(project.id);
+                                                            }}
+                                                            className="p-1.5 rounded-full text-purple-600 bg-purple-50 hover:bg-purple-100 transition-colors border border-transparent"
+                                                            title="Quản lý thành viên dự án"
+                                                        >
+                                                            <Users className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                 </div>
-                                                {project.description && (
-                                                    <CardDescription className="mt-1 text-xs line-clamp-2">
-                                                        {project.description}
-                                                    </CardDescription>
-                                                )}
                                             </div>
+                                            {project.description && (
+                                                <CardDescription className="mt-1 text-xs line-clamp-2">
+                                                    {project.description}
+                                                </CardDescription>
+                                            )}
                                         </div>
-                                    </CardHeader>
+                                    </div>
+                                </CardHeader>
 
+                                <Link href={`/projects/${project.id}`} className="flex-1 flex flex-col">
                                     <CardContent className="flex-1 pb-3">
-                                        {/* Progress Bar */}
+                                        {/* Progress Bar - Giá trị tiến độ */}
                                         <div className="mb-4">
                                             <div className="flex justify-between items-center mb-1.5">
                                                 <span className="text-xs font-medium text-gray-500">Tiến độ</span>
@@ -330,11 +386,17 @@ export default function ProjectsDashboard() {
                                                     }}
                                                 />
                                             </div>
+                                            {/* Giá trị tiền tệ đã hoàn thành */}
                                             {project.cached_completed_value !== undefined && project.cached_completed_value > 0 && (
                                                 <div className="flex gap-3 mt-2 text-xs font-medium text-green-600">
                                                     <span className="flex items-center gap-1">
                                                         Giá trị: {formatCurrency(project.cached_completed_value)}
                                                     </span>
+                                                    {project.total_budget && project.total_budget > 0 && (
+                                                        <span className="text-gray-400">
+                                                            / {formatCurrency(project.total_budget)}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             )}
                                         </div>
@@ -389,10 +451,57 @@ export default function ProjectsDashboard() {
                                             <ChevronRight className="h-4 w-4 text-gray-400 group-hover:text-blue-500 group-hover:translate-x-0.5 transition-all" />
                                         </div>
                                     </CardFooter>
-                                </Card>
-                            </Link>
+                                </Link>
+                            </Card>
                         );
                     })}
+                </div>
+            )}
+
+            {/* BOQ Upload Modal */}
+            {boqUploadProjectId !== null && (
+                <ProjectBOQUpload
+                    projectId={boqUploadProjectId}
+                    isOpen={true}
+                    onClose={() => setBoqUploadProjectId(null)}
+                    onSuccess={() => {
+                        setBoqUploadProjectId(null);
+                        fetchProjects();
+                    }}
+                />
+            )}
+
+            {/* BOQ Viewer Modal */}
+            {boqViewerProjectId !== null && (
+                <ProjectBOQViewer
+                    projectId={boqViewerProjectId}
+                    isOpen={true}
+                    onClose={() => setBoqViewerProjectId(null)}
+                />
+            )}
+
+            {/* Project Members Modal */}
+            {membersProjectId !== null && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                            <div className="flex items-center gap-2">
+                                <Users className="h-5 w-5 text-gray-500" />
+                                <h2 className="text-lg font-semibold text-gray-900">
+                                    Quản lý Thành viên - {projects.find(p => p.id === membersProjectId)?.name}
+                                </h2>
+                            </div>
+                            <button
+                                onClick={() => setMembersProjectId(null)}
+                                className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-0 overflow-y-auto flex-1 bg-gray-50">
+                            <ProjectMembers projectId={membersProjectId} />
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

@@ -39,10 +39,10 @@ copy .env.example .env  # Windows
 # - GEMINI_API_KEY (nếu dùng AI)
 
 # Chạy server
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API docs: truy cập `http://localhost:8002/docs`.
+API docs: truy cập `http://localhost:8000/docs`.
 
 ### Chạy Frontend (dev)
 

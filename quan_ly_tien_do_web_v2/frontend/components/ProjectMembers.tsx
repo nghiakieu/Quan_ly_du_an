@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
-import { getProjectMembers, addProjectMember, updateProjectMemberRole, removeProjectMember, getUsers, type ProjectMember, type UserInfo } from '@/lib/api';
+import { getProjectMembers, addProjectMember, updateProjectMemberRole, removeProjectMember, getUsers, type ProjectMember, type UserInfo, extractErrorMessage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
 import { Users, UserPlus, Trash2, Shield, Eye, Edit3 } from 'lucide-react';
@@ -18,6 +18,7 @@ export default function ProjectMembers({ projectId }: { projectId: number | stri
     const [showAddForm, setShowAddForm] = useState(false);
     const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
     const [selectedRole, setSelectedRole] = useState('viewer');
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const { isAuthenticated, user } = useAuth();
 
@@ -62,9 +63,10 @@ export default function ProjectMembers({ projectId }: { projectId: number | stri
             setShowAddForm(false);
             setSelectedUserId('');
             setSelectedRole('viewer');
+            setSearchQuery('');
             fetchMembers();
         } catch (err: any) {
-            toast.error(err?.response?.data?.detail || "Không thể thêm thành viên");
+            toast.error(extractErrorMessage(err, "Không thể thêm thành viên"));
         }
     };
 
@@ -122,20 +124,34 @@ export default function ProjectMembers({ projectId }: { projectId: number | stri
             </div>
 
             {/* Add Member Form */}
-            {showAddForm && (
+            {showAddForm && (() => {
+                const filteredUsers = allUsers.filter(u => 
+                    u.username.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                    u.email.toLowerCase().includes(searchQuery.toLowerCase())
+                );
+                
+                return (
                 <div className="p-4 bg-blue-50/50 border-b border-blue-100">
-                    <div className="flex gap-2 items-end flex-wrap">
-                        <div className="flex-1 min-w-[150px]">
-                            <label className="block text-xs text-gray-500 mb-1">Người dùng</label>
+                    <div className="flex gap-3 items-start flex-col sm:flex-row">
+                        <div className="flex-1 w-full min-w-[200px]">
+                            <label className="block text-xs font-medium text-gray-600 mb-1.5">Tìm người dùng</label>
+                            <input
+                                type="text"
+                                placeholder="Nhập tên hoặc email..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full text-sm px-3 py-2 border border-gray-300 rounded-t-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none border-b-0"
+                            />
                             <select
+                                size={5}
                                 value={selectedUserId}
                                 onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : '')}
-                                className="w-full text-sm px-2.5 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                className="w-full text-sm px-3 py-2 border border-gray-300 rounded-b-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                             >
-                                <option value="">-- Chọn --</option>
-                                {allUsers.map(u => (
-                                    <option key={u.id} value={u.id}>{u.username} ({u.email})</option>
+                                {filteredUsers.map(u => (
+                                    <option key={u.id} value={u.id} className="py-1 cursor-pointer hover:bg-gray-100">{u.username} ({u.email})</option>
                                 ))}
+                                {filteredUsers.length === 0 && <option disabled className="text-gray-400 italic">Không tìm thấy người dùng phù hợp</option>}
                             </select>
                         </div>
                         <div className="w-32">
@@ -150,25 +166,28 @@ export default function ProjectMembers({ projectId }: { projectId: number | stri
                                 <option value="manager">Quản lý</option>
                             </select>
                         </div>
-                        <button
-                            onClick={handleAddMember}
-                            disabled={!selectedUserId}
-                            className="px-3 py-1.5 text-xs font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                        >
-                            Thêm
-                        </button>
-                        <button
-                            onClick={() => setShowAddForm(false)}
-                            className="px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
-                        >
-                            Hủy
-                        </button>
+                        <div className="w-full sm:w-auto flex sm:flex-col gap-2 pt-1 sm:pt-6">
+                            <button
+                                onClick={handleAddMember}
+                                disabled={!selectedUserId}
+                                className="flex-1 sm:flex-none px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                            >
+                                Thêm
+                            </button>
+                            <button
+                                onClick={() => { setShowAddForm(false); setSearchQuery(''); setSelectedUserId(''); }}
+                                className="flex-1 sm:flex-none px-4 py-2 text-sm border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg transition-colors"
+                            >
+                                Hủy
+                            </button>
+                        </div>
                     </div>
                     {allUsers.length === 0 && (
-                        <p className="text-xs text-gray-400 mt-2">Tất cả người dùng đã là thành viên dự án</p>
+                        <p className="text-xs text-orange-500 mt-2 font-medium">Tất cả người dùng đã là thành viên dự án.</p>
                     )}
                 </div>
-            )}
+                );
+            })()}
 
             {/* Members List */}
             <div className="divide-y divide-gray-50">

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from 'react';
-import { uploadProjectBOQ } from '@/lib/api';
+import { uploadProjectBOQ, extractErrorMessage } from '@/lib/api';
 import { Upload, X, FileSpreadsheet, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -37,7 +37,7 @@ export default function ProjectBOQUpload({ projectId, isOpen, onClose, onSuccess
             onSuccess();
         } catch (error: any) {
             console.error('Upload Error:', error);
-            const msg = error.response?.data?.detail || 'Lỗi khi upload BOQ';
+            const msg = extractErrorMessage(error, 'Lỗi khi upload BOQ');
             toast.error(msg);
         } finally {
             setIsUploading(false);

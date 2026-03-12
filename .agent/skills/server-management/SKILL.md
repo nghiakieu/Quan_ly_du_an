@@ -1,9 +1,7 @@
 ---
 name: server-management
-description: Server management principles and decision-making.
-category: infrastructure
-version: 4.0.5
-layer: master-skill
+description: Server management principles and decision-making. Process management, monitoring strategy, and scaling decisions. Teaches thinking, not commands.
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash
 ---
 
 # Server Management

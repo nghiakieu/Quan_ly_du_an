@@ -21,17 +21,31 @@ export default function AdminUsersPage() {
     const [error, setError] = useState('');
 
     useEffect(() => {
-        // Simple client-side protection
-        if (!isAuthenticated) {
+        // Wait until auth context has initialized (token loaded from localStorage)
+        // user===null AND !isAuthenticated can mean EITHER "not logged in" OR "still loading"
+        // We check for localStorage token to differentiate
+        const storedToken = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+
+        // If no token at all → definitely not authenticated
+        if (!storedToken && !isAuthenticated) {
             router.push('/login');
             return;
         }
-        if (user && user.role !== 'admin' && user.role !== 'editor') {
+
+        // If token exists but user not yet loaded → wait (useEffect will re-run when user is set)
+        if (storedToken && !user) {
+            return; // AuthProvider is still fetching user info
+        }
+
+        // User is loaded, check role
+        if (user && user.role !== 'admin') {
             router.push('/');
             return;
         }
 
-        fetchUsers();
+        if (user && user.role === 'admin') {
+            fetchUsers();
+        }
     }, [isAuthenticated, user, router]);
 
     const fetchUsers = async () => {

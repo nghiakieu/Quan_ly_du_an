@@ -2,13 +2,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: any = {
   eslint: {
-    // Cảnh báo: Việc này làm Vercel bỏ qua các lỗi Eslint, giúp build thành công
-    ignoreDuringBuilds: true,
+    ignoreDuringBuilds: true, // TODO: tắt khi đã sửa hết lỗi ESLint
   },
   typescript: {
-    // Bỏ qua lỗi TypeScript (như var any)
-    ignoreBuildErrors: true,
-  }
+    ignoreBuildErrors: true,  // TODO: tắt khi đã sửa hết lỗi TypeScript
+  },
+  // Proxy qua API Route (app/api/v1/[...path]/route.ts) để xử lý lỗi kết nối Backend
 };
 
 export default nextConfig;

@@ -1,48 +1,63 @@
 ---
-description: Muốn sửa màu, thêm nút, sửa logic nhỏ? Vào đây.
+description: Add or update features in existing application. Used for iterative development.
 ---
 
-# /enhance - Incremental Feature Upgrade
+# /enhance - Update Application
 
 $ARGUMENTS
 
 ---
 
-## 🟢 PHASE 1: Impact Discovery
-**Agent**: `explorer-agent` & `frontend-specialist`
-**Mission**: Map the "Blast Radius."
-- **Action**: Identify all components and services affected by the change.
-- **Action**: Check for breaking CSS or Logic changes.
+## Task
 
-## 🟡 PHASE 2: Enhancement Plan
-**Agent**: `project-planner`
-**Mission**: Strategic addition.
-- **Action**: Create a mini-plan in the `task.md`.
-- **Note**: For major UI overhauls, invoke `/brainstorm` first.
+This command adds features or makes updates to existing application.
 
-## 🔵 PHASE 3: Surgical Implementation
-**Agent**: `frontend-specialist` or `backend-specialist`
-**Mission**: Add the "WOW" factor.
-- **Action**: Implement changes using `ui-ux-pro-max` standards.
-- **Standard**: Follow [clean-code](file:///skills/clean-code/SKILL.md) and [tailwind-patterns](file:///skills/tailwind-patterns/SKILL.md).
+### Steps:
 
-## 🔴 PHASE 4: Professional Verification
-**Agent**: `quality-inspector` & `test-engineer`
-**Mission**: Verify the delta.
-- **Action**: Run `/preview` to playtest the UI.
-- **Action**: Verify that existing tests still pass (Regression Check).
-- **Handoff**: Document the change in `walkthrough.md`.
+1. **Understand Current State**
+   - Load project state with `python .agent/scripts/session_manager.py info`
+   - Understand existing features, tech stack
+
+2. **Plan Changes**
+   - Determine what will be added/changed
+   - Detect affected files
+   - Check dependencies
+
+3. **Present Plan to User** (for major changes)
+   ```
+   "To add admin panel:
+   - I'll create 15 new files
+   - Update 8 files
+   - Takes ~10 minutes
+   
+   Should I start?"
+   ```
+
+4. **Apply**
+   - Call relevant agents
+   - Make changes
+   - Test
+
+5. **Update Preview**
+   - Hot reload or restart
 
 ---
 
-## Enhancement Principles:
-- **Non-Destructive**: Don't break existing features to add new ones.
-- **Consistent UI**: New elements must match the existing Design System.
-- **Atomic Commits**: Group project changes in logical git commits.
+## Usage Examples
+
+```
+/enhance add dark mode
+/enhance build admin panel
+/enhance integrate payment system
+/enhance add search feature
+/enhance edit profile page
+/enhance make responsive
+```
 
 ---
 
-## Examples:
-- `/enhance add dark mode toggle`
-- `/enhance integrate Google Auth`
-- `/enhance make the landing page sections fade in`
+## Caution
+
+- Get approval for major changes
+- Warn on conflicting requests (e.g., "use Firebase" when project uses PostgreSQL)
+- Commit each change with git

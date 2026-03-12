@@ -16,7 +16,7 @@ export default function LoginPage() {
     const { login } = useAuth();
     const router = useRouter();
 
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1';
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -39,13 +39,19 @@ export default function LoginPage() {
                     body: formData.toString(),
                 });
 
-                if (res.ok) {
-                    const data = await res.json();
+                const text = await res.text();
+                let data: { access_token?: string; detail?: string };
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch {
+                    setError('Phản hồi máy chủ không hợp lệ. Kiểm tra Backend đã chạy chưa.');
+                    return;
+                }
+                if (res.ok && data.access_token) {
                     login(data.access_token);
                     router.push('/'); // Redirect to dashboard
                 } else {
-                    const errData = await res.json();
-                    setError(errData.detail || 'Đăng nhập thất bại.');
+                    setError(data.detail || 'Đăng nhập thất bại.');
                 }
             } else {
                 // Handle Register
@@ -62,13 +68,19 @@ export default function LoginPage() {
                     }),
                 });
 
+                const text = await res.text();
+                let errData: { detail?: string } = {};
+                try {
+                    errData = text ? JSON.parse(text) : {};
+                } catch {
+                    setError('Phản hồi máy chủ không hợp lệ.');
+                    return;
+                }
                 if (res.ok) {
                     setSuccess('Đăng ký thành công! Vui lòng chờ Admin phê duyệt tài khoản.');
-                    // Switch back to login view after successful registration, but keep messages
                     setIsLogin(true);
                     setPassword('');
                 } else {
-                    const errData = await res.json();
                     setError(errData.detail || 'Đăng ký thất bại.');
                 }
             }

@@ -35,6 +35,9 @@ class DiagramSummary(BaseModel):
     name: str
     description: Optional[str] = None
     updated_at: Optional[datetime] = None
+    cached_progress_percent: Optional[float] = None
+    cached_target_value: Optional[float] = None
+    cached_completed_value: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -44,6 +47,7 @@ class Project(ProjectBase):
     manager_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    cached_progress_percent: Optional[float] = None
     diagrams: List[DiagramSummary] = []
 
     class Config:

@@ -22,7 +22,7 @@ function getColorForUser(username: string): string {
     return USER_COLORS[hash % USER_COLORS.length];
 }
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8002';
+const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
 
 export default function PresenceCursors({
     diagramId,

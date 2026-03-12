@@ -1,12 +1,22 @@
 import axios from 'axios';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8002/api/v1';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export const api = axios.create({
     baseURL: API_URL,
     headers: {
         'Content-Type': 'application/json',
     },
+    transformResponse: [(data) => {
+        if (typeof data !== 'string' || data.trim() === '') {
+            return data;
+        }
+        try {
+            return JSON.parse(data);
+        } catch {
+            return { detail: 'Phản hồi máy chủ không hợp lệ (không phải JSON). Kiểm tra Backend.' };
+        }
+    }],
 });
 
 // Add Interceptor for JWT
@@ -73,7 +83,10 @@ export interface DiagramSummary {
     id: number;
     name: string;
     description?: string;
-    updated_at?: string;
+    updated_at: string;
+    cached_progress_percent?: number;
+    cached_target_value?: number;
+    cached_completed_value?: number;
 }
 
 // v1.3: Extended Project interface
@@ -336,8 +349,57 @@ export const removeProjectMember = async (
 };
 
 export const getUsers = async (): Promise<UserInfo[]> => {
-    const response = await api.get('/users/');
+    // Use /users/all which allows all authenticated users (not just admin)
+    const response = await api.get('/users/all');
     return response.data;
+};
+
+// --- CHAT API ---
+export interface ChatRoomCreate {
+    name?: string;
+    is_group?: boolean;
+    project_id?: number;
+    participant_ids: number[];
+}
+
+export const getAllUsersPublic = async (): Promise<UserInfo[]> => {
+    const response = await api.get('/users/all');
+    return response.data;
+};
+
+export const createChatRoom = async (data: ChatRoomCreate): Promise<any> => {
+    const response = await api.post('/chat/rooms', data);
+    return response.data;
+};
+
+export const deleteChatMessage = async (roomId: number, messageId: number): Promise<any> => {
+    const response = await api.delete(`/chat/rooms/${roomId}/messages/${messageId}`);
+    return response.data;
+};
+
+export const leaveChatRoom = async (roomId: number): Promise<any> => {
+    const response = await api.delete(`/chat/rooms/${roomId}`);
+    return response.data;
+};
+
+export const markRoomRead = async (roomId: number): Promise<any> => {
+    const response = await api.post(`/chat/rooms/${roomId}/read`);
+    return response.data;
+};
+
+export const extractErrorMessage = (error: any, defaultMessage: string = "Đã xảy ra lỗi"): string => {
+    if (!error) return defaultMessage;
+    const detail = error.response?.data?.detail;
+    if (detail) {
+        if (typeof detail === 'string') return detail;
+        if (Array.isArray(detail)) {
+            return detail.map((err: any) => {
+                const field = err.loc ? err.loc[err.loc.length - 1] : '';
+                return `${field ? field + ': ' : ''}${err.msg}`;
+            }).join(', ');
+        }
+    }
+    return error.message || defaultMessage;
 };
 
 export default api;

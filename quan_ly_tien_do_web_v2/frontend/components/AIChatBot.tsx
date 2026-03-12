@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Bot, X, Send, User, Sparkles, Loader2, Settings, Trash2, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
-import { api } from '@/lib/api';
+import { api, extractErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface Message {
@@ -95,7 +95,7 @@ export default function AIChatBot() {
             setMessages(prev => [...prev, aiMsg]);
         } catch (error: any) {
             console.error("AI Chat Error:", error);
-            const errorMsg = error.response?.data?.detail || "Đã xảy ra lỗi khi kết nối với AI. Vui lòng kiểm tra lại cấu hình API key.";
+            const errorMsg = extractErrorMessage(error, "Đã xảy ra lỗi khi kết nối với AI. Vui lòng kiểm tra lại cấu hình API key.");
             setMessages(prev => [...prev, {
                 id: (Date.now() + 1).toString(),
                 role: 'ai',
@@ -312,11 +312,6 @@ export default function AIChatBot() {
                     <div className="absolute inset-0 rounded-full bg-white opacity-0 group-hover:opacity-20 transition-opacity"></div>
                     <Sparkles className="h-6 w-6 relative z-10" />
 
-                    {/* Badge */}
-                    <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-                    </span>
                 </button>
             )}
         </div>

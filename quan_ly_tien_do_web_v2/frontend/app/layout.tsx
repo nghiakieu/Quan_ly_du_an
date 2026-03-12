@@ -4,6 +4,7 @@ import { Toaster } from 'sonner';
 import Navigation from '@/components/Navigation';
 import { AuthProvider } from '@/lib/auth';
 import AIChatBot from '@/components/AIChatBot';
+import GlobalChatPopup from '@/components/GlobalChatPopup';
 
 export const metadata: Metadata = {
   title: "Quản Lý Dự Án by Nghĩa Kiều",
@@ -22,6 +23,7 @@ export default function RootLayout({
           <Navigation />
           {children}
           <AIChatBot />
+          <GlobalChatPopup />
           <Toaster position="top-right" richColors />
         </AuthProvider>
       </body>

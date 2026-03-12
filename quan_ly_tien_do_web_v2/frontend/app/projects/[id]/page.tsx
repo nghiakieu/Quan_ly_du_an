@@ -3,9 +3,10 @@
 import { use, useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { getProject, getProjectProgress, createDiagram, deleteDiagram, type Project, type ProjectProgress, type DiagramSummary } from '@/lib/api';
+import { getProject, getProjectProgress, createDiagram, deleteDiagram, extractErrorMessage, type Project, type ProjectProgress, type DiagramSummary } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
+import ProjectDashboard from '@/components/ProjectDashboard';
 import SimpleDragTest from '@/components/diagrams/SimpleDragTest';
 import ProjectMembers from '@/components/ProjectMembers';
 import KanbanBoard from '@/components/KanbanBoard';
@@ -16,7 +17,7 @@ import ProjectBOQUpload from '@/components/ProjectBOQUpload';
 import ProjectBOQViewer from '@/components/ProjectBOQViewer';
 import PresenceCursors from '@/components/PresenceCursors';
 import DiagramOverviewCard from '@/components/diagrams/DiagramOverviewCard';
-import { ArrowLeft, Plus, FileText, Trash2, Eye, Building2, Banknote, Clock, ChevronRight, ChevronDown, ListTodo, CalendarDays, Calculator, Users, Upload } from 'lucide-react';
+import { ArrowLeft, Plus, FileText, Trash2, Eye, Building2, Banknote, Clock, ChevronRight, ChevronDown, ListTodo, CalendarDays, Calculator, Users, Upload, X } from 'lucide-react';
 
 const CollapsibleSection = ({ title, defaultOpen = false, children, icon: Icon }: any) => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -48,6 +49,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     const [progress, setProgress] = useState<ProjectProgress | null>(null);
     const [isBOQUploadOpen, setIsBOQUploadOpen] = useState(false);
     const [isBOQViewerOpen, setIsBOQViewerOpen] = useState(false);
+    const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
     const [activeDiagramId, setActiveDiagramId] = useState<number | null>(() => {
         const diagramParam = searchParams.get('diagram');
         return diagramParam ? parseInt(diagramParam) : null;
@@ -101,8 +103,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             setNewDiagramDesc('');
             setShowCreateForm(false);
             fetchProjectDetail();
-        } catch (err) {
-            toast.error("Không thể tạo công trình. Vui lòng đăng nhập.");
+        } catch (err: unknown) {
+            toast.error(extractErrorMessage(err, "Không thể tạo công trình. Vui lòng đăng nhập."));
         }
     };
 
@@ -232,7 +234,18 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-6">
                 <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                     <div className="flex-1">
-                        <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+                        <div className="flex items-center gap-3">
+                            <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
+                            {isAuthenticated && (
+                                <button
+                                    onClick={() => setIsMembersModalOpen(true)}
+                                    className="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors flex items-center justify-center bg-gray-50 border border-gray-200"
+                                    title="Quản lý thành viên dự án"
+                                >
+                                    <Users className="h-5 w-5" />
+                                </button>
+                            )}
+                        </div>
                         {project.description && (
                             <p className="text-gray-500 mt-1 text-sm">{project.description}</p>
                         )}
@@ -257,73 +270,19 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                             )}
                         </div>
                     </div>
-
-                    {/* Progress Summary */}
-                    <div className="w-full lg:w-64 flex-shrink-0">
-                        <div className="flex justify-between items-center mb-1.5">
-                            <span className="text-xs font-medium text-gray-500">Tiến độ tổng</span>
-                            <span className="text-lg font-bold text-blue-700">{progressPercent}%</span>
-                        </div>
-                        <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                            <div
-                                className="h-full rounded-full transition-all duration-700 ease-out"
-                                style={{
-                                    width: `${progressPercent}%`,
-                                    background: progressPercent >= 80
-                                        ? 'linear-gradient(90deg, #22c55e, #16a34a)'
-                                        : progressPercent >= 40
-                                            ? 'linear-gradient(90deg, #3b82f6, #2563eb)'
-                                            : 'linear-gradient(90deg, #f59e0b, #d97706)'
-                                }}
-                            />
-                        </div>
-                        {progress && (
-                            <div className="grid grid-cols-3 gap-2 mt-3 text-center">
-                                <div className="bg-green-50 rounded-lg py-1.5 px-2">
-                                    <div className="text-sm font-bold text-green-700">{progress.completed}</div>
-                                    <div className="text-xs text-green-600">Xong</div>
-                                </div>
-                                <div className="bg-blue-50 rounded-lg py-1.5 px-2">
-                                    <div className="text-sm font-bold text-blue-700">{progress.in_progress}</div>
-                                    <div className="text-xs text-blue-600">Đang</div>
-                                </div>
-                                <div className="bg-gray-50 rounded-lg py-1.5 px-2">
-                                    <div className="text-sm font-bold text-gray-600">{progress.not_started}</div>
-                                    <div className="text-xs text-gray-500">Chưa</div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
                 </div>
             </div>
 
-            {/* Project Members */}
+            {/* Dashboard Tổng Quan */}
+            <ProjectDashboard project={project} />
+
+            {/* Kanban, Gantt, BOQ, ProjectMembers temporarily hidden or moved */}
+            {/* 
             <CollapsibleSection title="Quản lý Thành viên" defaultOpen={false} icon={Users}>
-                <div className="p-4 bg-gray-50/50">
-                    <ProjectMembers projectId={projectId} />
-                </div>
+               ...
             </CollapsibleSection>
-
-            {/* Kanban Board */}
-            <CollapsibleSection title="Bảng Công Việc (Kanban)" defaultOpen={false} icon={ListTodo}>
-                <div className="p-4 bg-gray-50/50">
-                    <KanbanBoard projectId={projectId} />
-                </div>
-            </CollapsibleSection>
-
-            {/* Gantt Chart */}
-            <CollapsibleSection title="Tiến độ Thời gian (Gantt)" defaultOpen={false} icon={CalendarDays}>
-                <div className="p-4 bg-gray-50/50">
-                    <GanttChart projectId={projectId} />
-                </div>
-            </CollapsibleSection>
-
-            {/* BOQ Summary (C4) */}
-            <CollapsibleSection title="Tổng hợp khối lượng & Giá trị (BOQ)" defaultOpen={false} icon={Calculator}>
-                <div className="p-0">
-                    <BOQSummary projectId={projectId} />
-                </div>
-            </CollapsibleSection>
+            ...
+            */}
 
             {/* Diagrams Section Header */}
             <div className="flex items-center justify-between mb-4">
@@ -413,6 +372,26 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                 isOpen={isBOQViewerOpen}
                 onClose={() => setIsBOQViewerOpen(false)}
             />
+
+            {/* Project Members Modal */}
+            {isMembersModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+                        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                            <div className="flex items-center gap-2">
+                                <Users className="h-5 w-5 text-gray-500" />
+                                <h2 className="text-lg font-semibold text-gray-900">Quản lý Thành viên Dự án</h2>
+                            </div>
+                            <button onClick={() => setIsMembersModalOpen(false)} className="p-1 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors">
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
+                        <div className="p-0 overflow-y-auto flex-1 bg-gray-50">
+                            <ProjectMembers projectId={projectId} />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

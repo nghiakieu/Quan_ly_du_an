@@ -21,6 +21,17 @@ def read_users(
     users = db.query(User).offset(skip).limit(limit).all()
     return users
 
+@router.get("/all", response_model=List[UserSchema])
+def read_all_users_public(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
+    """
+    Retrieve all active users. Allowed for all authenticated users to create chat groups.
+    """
+    users = db.query(User).filter(User.is_active == True).all()
+    return users
+
 @router.put("/{user_id}/approve", response_model=UserSchema)
 def approve_user(
     *,

@@ -1,9 +1,7 @@
 ---
 name: app-builder
-description: Main application building orchestrator.
-category: orchestration
-version: 4.0.5
-layer: master-skill
+description: Main application building orchestrator. Creates full-stack applications from natural language requests. Determines project type, selects tech stack, coordinates agents.
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash, Agent
 ---
 
 # App Builder - Application Building Orchestrator
@@ -17,7 +15,7 @@ layer: master-skill
 | File | Description | When to Read |
 |------|-------------|--------------|
 | `project-detection.md` | Keyword matrix, project type detection | Starting new project |
-| `tech-stack.md` | 2025 default stack, alternatives | Choosing technologies |
+| `tech-stack.md` | 2026 default stack, alternatives | Choosing technologies |
 | `agent-coordination.md` | Agent pipeline, execution order | Coordinating multi-agent work |
 | `scaffolding.md` | Directory structure, core files | Creating project structure |
 | `feature-building.md` | Feature analysis, error handling | Adding features to existing project |

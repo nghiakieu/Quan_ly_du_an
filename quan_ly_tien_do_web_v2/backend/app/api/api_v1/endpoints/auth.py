@@ -84,7 +84,9 @@ def register(
     user_in: UserCreate
 ) -> Any:
     """
-    Register a new user. The user will be created but inactive until approved by an admin.
+    Register a new user.
+    - If no users exist yet → first user becomes admin (active immediately).
+    - Otherwise → role=viewer, is_active=False, waits for admin approval.
     """
     user_by_username = db.query(User).filter(User.username == user_in.username).first()
     user_by_email = db.query(User).filter(User.email == user_in.email).first()
@@ -92,19 +94,23 @@ def register(
         raise HTTPException(status_code=400, detail="Username already exists")
     if user_by_email:
         raise HTTPException(status_code=400, detail="Email already exists")
-    
+
+    # Check if this is the very first user
+    existing_user_count = db.query(User).count()
+    is_first_user = existing_user_count == 0
+
     user = User(
         email=user_in.email,
         username=user_in.username,
         hashed_password=security.get_password_hash(user_in.password),
-        role="viewer", # Default role
-        is_active=False # Must be approved by admin
+        role="admin" if is_first_user else "viewer",
+        is_active=True if is_first_user else False,
     )
-    db.add(user)
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
+
 
 
 @router.post("/forgot-password")

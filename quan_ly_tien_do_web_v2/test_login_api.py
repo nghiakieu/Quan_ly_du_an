@@ -1,6 +1,6 @@
 import requests
 
-url = "http://localhost:8002/api/v1/auth/login/access-token"
+url = "http://localhost:8000/api/v1/auth/login/access-token"
 data = {"username": "admin", "password": "admin123"}
 headers = {"Content-Type": "application/x-www-form-urlencoded"}
 

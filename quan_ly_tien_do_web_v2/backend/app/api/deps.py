@@ -36,7 +36,7 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
     
-    user = db.query(User).filter(User.id == token_data.sub).first()
+    user = db.query(User).filter(User.id == int(token_data.sub)).first()
     if user is None:
         raise credentials_exception
     return user

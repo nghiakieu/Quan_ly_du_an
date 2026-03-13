@@ -39,6 +39,7 @@ def get_project_tasks(
     project_id: int,
     status: Optional[str] = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get all tasks for a project, optionally filtered by status."""
     project = db.query(Project).filter(Project.id == project_id).first()

@@ -18,6 +18,7 @@ def read_projects(
     skip: int = 0,
     limit: int = 100,
     status: Optional[str] = None,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Retrieve projects with optional status filter.
@@ -68,6 +69,7 @@ def read_project(
     *,
     db: Session = Depends(get_db),
     project_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Get project by ID with diagrams list.
@@ -85,6 +87,7 @@ def get_project_progress(
     *,
     db: Session = Depends(get_db),
     project_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Calculate project progress from diagram block statuses.
@@ -170,6 +173,7 @@ def get_project_report(
     *,
     db: Session = Depends(get_db),
     project_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     C3: Full project report data for PDF generation.
@@ -270,6 +274,7 @@ def get_project_boq_summary(
     *,
     db: Session = Depends(get_db),
     project_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     C4: Aggregated BOQ across all diagrams in a project.
@@ -344,6 +349,7 @@ def get_project_boq(
     *,
     db: Session = Depends(get_db),
     project_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
 ):
     """
     Get project-level master BOQ data and aggregate actual/plan quantities from diagrams.

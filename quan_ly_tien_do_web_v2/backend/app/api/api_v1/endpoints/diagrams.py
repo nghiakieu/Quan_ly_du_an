@@ -25,7 +25,8 @@ def read_diagrams(
     skip: int = 0,
     limit: int = 100,
     project_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Retrieve diagrams.
@@ -174,7 +175,8 @@ def update_diagram(
 @router.get("/latest", response_model=Diagram)
 def read_latest_diagram(
     *,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Get the most recently created or updated diagram.
@@ -202,7 +204,8 @@ def read_latest_diagram(
 def read_diagram(
     *,
     db: Session = Depends(get_db),
-    diagram_id: int
+    diagram_id: int,
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Get diagram by ID.

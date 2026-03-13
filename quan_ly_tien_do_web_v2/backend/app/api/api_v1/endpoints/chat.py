@@ -13,7 +13,7 @@ from app.schemas.chat import (
     ChatParticipantResponse
 )
 from app.api.ws_manager import manager
-from jose import jwt, JWTError
+import jwt
 from app.core.config import settings
 from app.schemas.token import TokenPayload
 
@@ -241,7 +241,7 @@ async def chat_websocket_endpoint(
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         token_data = TokenPayload(**payload)
         user_id = token_data.sub
-    except JWTError:
+    except jwt.PyJWTError:
         await websocket.close(code=1008)
         return
 

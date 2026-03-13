@@ -25,7 +25,7 @@ def send_reset_password_email(email_to: str, reset_token: str) -> bool:
 
         {reset_token}
         
-        Mã này có hiệu lực trong 15 phút. Vui lòng nhập mã này trên ứng dụng cùng với mật khẩu mới của bạn.
+        Mã này có hiệu lực trong 15 phút. Vui lòng sao chép và nhập mã này trên ứng dụng cùng với mật khẩu mới của bạn.
         Nếu bạn không yêu cầu thay đổi mật khẩu, vui lòng bỏ qua email này.
 
         Trân trọng,

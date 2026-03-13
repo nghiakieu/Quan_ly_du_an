@@ -1,7 +1,10 @@
 import json
 import os
 from typing import Any, Dict
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from app.api import deps
+from app.models.user import User
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -12,7 +15,7 @@ class BridgeConfig(BaseModel):
     bridge: Dict[str, Any]
 
 @router.get("", response_model=BridgeConfig)
-def get_config():
+def get_config(current_user: User = Depends(deps.get_current_active_user)):
     """
     Get current bridge configuration
     """
@@ -27,7 +30,10 @@ def get_config():
         raise HTTPException(status_code=500, detail=f"Error reading config: {str(e)}")
 
 @router.post("", response_model=BridgeConfig)
-def save_config(config: BridgeConfig):
+def save_config(
+    config: BridgeConfig,
+    current_user: User = Depends(deps.get_current_active_user),
+):
     """
     Save bridge configuration
     """

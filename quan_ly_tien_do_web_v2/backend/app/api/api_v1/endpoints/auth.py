@@ -127,9 +127,9 @@ def forgot_password(
         # Prevent user enumeration - still return 200
         return {"message": "Nếu email tồn tại, một mã khôi phục sẽ được gửi đến bạn."}
     
-    # Generate 6-digit token
-    import random
-    reset_token = f"{random.randint(100000, 999999)}"
+    # Generate cryptographically secure token (16 hex chars, copy-paste from email)
+    import secrets
+    reset_token = secrets.token_hex(8)
     
     # Store token and expiry (15 mins)
     user.reset_token = reset_token

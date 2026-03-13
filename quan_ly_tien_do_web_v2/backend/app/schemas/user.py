@@ -1,5 +1,5 @@
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 # Shared properties
 class UserBase(BaseModel):
@@ -12,7 +12,7 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     email: EmailStr
     username: str
-    password: str
+    password: str = Field(..., min_length=8, description="Mật khẩu tối thiểu 8 ký tự")
     role: str = "viewer"
 
 # Properties to receive via API on update
@@ -40,4 +40,4 @@ class ForgotPassword(BaseModel):
 class ResetPassword(BaseModel):
     email: EmailStr
     token: str
-    new_password: str
+    new_password: str = Field(..., min_length=8, description="Mật khẩu mới tối thiểu 8 ký tự")

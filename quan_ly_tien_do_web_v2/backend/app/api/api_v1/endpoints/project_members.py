@@ -15,6 +15,7 @@ router = APIRouter()
 def get_project_members(
     project_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
 ):
     """Get all members of a project."""
     project = db.query(Project).filter(Project.id == project_id).first()

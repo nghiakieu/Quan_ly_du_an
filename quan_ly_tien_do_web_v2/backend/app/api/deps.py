@@ -1,6 +1,6 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+import jwt
 from sqlalchemy.orm import Session
 from typing import Generator
 
@@ -33,7 +33,7 @@ def get_current_user(
             token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
         )
         token_data = TokenPayload(**payload)
-    except JWTError:
+    except jwt.PyJWTError:
         raise credentials_exception
     
     user = db.query(User).filter(User.id == int(token_data.sub)).first()

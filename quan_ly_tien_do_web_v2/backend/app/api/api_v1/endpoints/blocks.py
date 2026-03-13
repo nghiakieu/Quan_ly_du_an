@@ -18,7 +18,8 @@ router = APIRouter()
 def read_blocks(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
     Retrieve blocks.
@@ -27,7 +28,10 @@ def read_blocks(
     return blocks
 
 @router.get("/stats")
-def read_stats(db: Session = Depends(get_db)) -> Any:
+def read_stats(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user),
+) -> Any:
     """
     Get dashboard statistics.
     """

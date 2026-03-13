@@ -2,7 +2,7 @@ import json
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query
 from fastapi.middleware.cors import CORSMiddleware
-from jose import jwt, JWTError
+import jwt
 from app.schemas.token import TokenPayload
 from app.api.api_v1.api import api_router
 from app.core.config import settings
@@ -25,12 +25,13 @@ async def lifespan(app: FastAPI):
     
     db = SessionLocal()
     try:
-        existing_nghia = db.query(UserModel).filter(UserModel.username == "NghiaKieu").first()
-        if not existing_nghia:
-            print("[Startup] Khởi tạo tài khoản Admin mặc định (kieulinhnghia@gmail.com)")
+        default_username = settings.DEFAULT_ADMIN_USERNAME
+        existing_admin = db.query(UserModel).filter(UserModel.username == default_username).first()
+        if not existing_admin:
+            print(f"[Startup] Khởi tạo tài khoản Admin mặc định ({settings.DEFAULT_ADMIN_EMAIL})")
             default_admin = UserModel(
-                username="NghiaKieu",
-                email="kieulinhnghia@gmail.com",
+                username=settings.DEFAULT_ADMIN_USERNAME,
+                email=settings.DEFAULT_ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.DEFAULT_ADMIN_PASSWORD),
                 role="admin",
                 is_active=True
@@ -81,8 +82,8 @@ async def websocket_diagram_endpoint(websocket: WebSocket, diagram_id: str, toke
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         token_data = TokenPayload(**payload)
         if not token_data.sub:
-            raise JWTError()
-    except JWTError:
+            raise jwt.PyJWTError("Invalid token payload")
+    except jwt.PyJWTError:
         await websocket.close(code=1008)
         return
 

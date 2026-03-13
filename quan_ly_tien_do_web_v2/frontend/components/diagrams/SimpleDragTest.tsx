@@ -7,7 +7,7 @@ import StatusPieChart from './StatusPieChart';
 import ProgressDashboard from './ProgressDashboard';
 import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth';
-import { syncDiagramBOQ, extractErrorMessage } from '@/lib/api';
+import { syncDiagramBOQ, extractErrorMessage, getDiagrams, getDiagram, createDiagram, updateDiagram } from '@/lib/api';
 import BOQSyncReport from '../BOQSyncReport';
 import { toast } from 'sonner';
 
@@ -1177,10 +1177,6 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const [syncMessage, setSyncMessage] = useState<string | null>(null);
     const isFirstLoad = React.useRef(true);
 
-    // Use custom env or fallback to /api/v1 (goes through Next.js proxy)
-    const API_URL = process.env.NEXT_PUBLIC_API_URL
-        ? `${process.env.NEXT_PUBLIC_API_URL}/diagrams`
-        : '/api/v1/diagrams';
 
     const fetchDiagramData = async () => {
         try {
@@ -1188,21 +1184,14 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
 
             if (currentDiagramId) {
                 // v1.3: Load specific diagram by ID
-                const res = await fetch(`${API_URL}/${currentDiagramId}`);
-                if (res.ok) {
-                    diagramData = await res.json();
-                }
+                diagramData = await getDiagram(currentDiagramId);
             } else {
                 // Fallback: fetch list and pick latest
-                const fetchUrl = projectId ? `${API_URL}?project_id=${projectId}` : API_URL;
-                const res = await fetch(fetchUrl);
-                if (res.ok) {
-                    const data = await res.json();
-                    if (data && data.length > 0) {
-                        diagramData = data.sort((a: { updated_at: string }, b: { updated_at: string }) =>
-                            new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
-                        )[0];
-                    }
+                const data = await getDiagrams(projectId ? parseInt(projectId) : undefined);
+                if (data && data.length > 0) {
+                    diagramData = data.sort((a: any, b: any) =>
+                        new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+                    )[0];
                 }
             }
 
@@ -1230,14 +1219,13 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                 if (isFirstLoad.current) {
                     setCurrentDiagramId(diagramData.id);
                     handleFitToScreen(loadedObjects);
+                    isFirstLoad.current = false;
                 }
             }
         } catch (err) {
             console.error("Failed to load initial diagram", err);
-        } finally {
-            if (isFirstLoad.current) {
-                isFirstLoad.current = false;
-            }
+            // Note: We don't set isFirstLoad to false here to allow retry
+            // if it was a transient network error.
         }
     };
 
@@ -1251,8 +1239,8 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         if (!currentDiagramId) return;
 
         // Build ws url based on current API URL (support https -> wss)
-        const baseUrl = API_URL.replace(/^http/, 'ws');
-        const wsUrl = `${baseUrl}/ws/${currentDiagramId}`;
+        const baseUrl = (process.env.NEXT_PUBLIC_API_URL || '').replace(/^http/, 'ws') || `ws://${window.location.host}/api/v1`;
+        const wsUrl = `${baseUrl}/diagrams/ws/${currentDiagramId}`;
 
         console.log(`[WS] Connecting to ${wsUrl}...`);
         const ws = new WebSocket(wsUrl);
@@ -1303,12 +1291,9 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             return;
         }
 
-        // Check auth token before attempting save - skip if not logged in
+        // Check auth token before attempting save
         const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-        if (!token) {
-            // Not logged in - don't attempt save to avoid 401 errors
-            return;
-        }
+        if (!token) return;
 
         setSaveStatus('saving');
 
@@ -1319,37 +1304,19 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                 project_id: projectId ? parseInt(projectId) : null
             };
 
-            // Chỉ gửi name và description khi tạo mới sơ đồ (POST), không gửi khi cập nhật (PUT)
-            if (!currentDiagramId) {
-                payload.name = localDiagramName;
-                payload.description = 'Auto-saved';
-            }
-
             try {
-                const headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                };
-
-                let res;
+                let data;
                 if (currentDiagramId) {
                     // Update existing
-                    res = await fetch(`${API_URL}/${currentDiagramId}`, {
-                        method: 'PUT',
-                        headers: headers,
-                        body: JSON.stringify(payload)
-                    });
+                    data = await updateDiagram(currentDiagramId, payload);
                 } else {
                     // Create new
-                    res = await fetch(API_URL, {
-                        method: 'POST',
-                        headers: headers,
-                        body: JSON.stringify(payload)
-                    });
+                    payload.name = localDiagramName;
+                    payload.description = 'Auto-saved';
+                    data = await createDiagram(payload);
                 }
 
-                if (res.ok) {
-                    const data = await res.json();
+                if (data) {
                     if (!currentDiagramId) setCurrentDiagramId(data.id);
 
                     lastSavedData.current = {
@@ -1357,11 +1324,6 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                         boqData: currentBoqStr
                     };
                     setSaveStatus('saved');
-                } else {
-                    if (res.status !== 401) {
-                        console.error("Auto-save failed with status", res.status);
-                    }
-                    setSaveStatus('error');
                 }
             } catch (err) {
                 console.error("Auto-save failed", err);

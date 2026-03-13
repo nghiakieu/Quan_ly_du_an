@@ -24,15 +24,15 @@ if exist "quan_ly_tien_do_web_v2\frontend\.next" (
 echo [Step 3/4] Khoi dong Backend API (port 8000)...
 set BACKEND_STARTED=0
 if exist ".venv\Scripts\python.exe" (
-    start "Backend API 8000" cmd /c "cd /d %~dp0quan_ly_tien_do_web_v2\backend && %~dp0.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 && pause"
+    start "Backend API 8000" cmd /c "cd /d %~dp0quan_ly_tien_do_web_v2\backend && %~dp0.venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 && pause"
     goto :backend_ok
 )
 if exist "quan_ly_tien_do_web_v2\backend\.venv\Scripts\python.exe" (
-    start "Backend API 8000" cmd /c "cd /d %~dp0quan_ly_tien_do_web_v2\backend && .venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 && pause"
+    start "Backend API 8000" cmd /c "cd /d %~dp0quan_ly_tien_do_web_v2\backend && .venv\Scripts\python.exe -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 && pause"
     goto :backend_ok
 )
 :: Thu python system
-start "Backend API 8000" cmd /c "cd /d %~dp0quan_ly_tien_do_web_v2\backend && python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 && pause"
+start "Backend API 8000" cmd /c "cd /d %~dp0quan_ly_tien_do_web_v2\backend && python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 && pause"
 :backend_ok
 
 :: 4. Khoi dong Frontend
@@ -43,13 +43,13 @@ echo.
 echo ===================================================
 echo   HE THONG DA KHOI DONG!
 echo   - Backend:  http://127.0.0.1:8000
-echo   - Frontend: http://localhost:3000
+echo   - Frontend: http://127.0.0.1:3000
 echo ===================================================
 echo.
 echo Dang cho Backend san sang (15 giay)...
 timeout /t 15 > nul
 echo Mo trinh duyet...
-start http://localhost:3000
+start http://127.0.0.1:3000
 echo.
 echo Hoan tat. Bam phim bat ky de dong...
 pause > nul

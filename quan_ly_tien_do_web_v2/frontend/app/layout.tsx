@@ -6,6 +6,8 @@ import { AuthProvider } from '@/lib/auth';
 import AIChatBot from '@/components/AIChatBot';
 import GlobalChatPopup from '@/components/GlobalChatPopup';
 
+import { SWRProvider } from '@/components/SWRProvider';
+
 export const metadata: Metadata = {
   title: "Quản Lý Dự Án by Nghĩa Kiều",
   description: "Hệ thống quản lý dự án xây dựng",
@@ -20,11 +22,13 @@ export default function RootLayout({
     <html lang="vi" suppressHydrationWarning>
       <body className="antialiased">
         <AuthProvider>
-          <Navigation />
-          {children}
-          <AIChatBot />
-          <GlobalChatPopup />
-          <Toaster position="top-right" richColors />
+          <SWRProvider>
+            <Navigation />
+            {children}
+            <AIChatBot />
+            <GlobalChatPopup />
+            <Toaster position="top-right" richColors />
+          </SWRProvider>
         </AuthProvider>
       </body>
     </html>

@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useEffect, useState, useRef } from 'react';
+import useSWR from 'swr';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { getProject, getProjectProgress, createDiagram, deleteDiagram, extractErrorMessage, type Project, type ProjectProgress, type DiagramSummary } from '@/lib/api';
@@ -45,8 +46,15 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     const unwrappedParams = use(params);
     const projectId = unwrappedParams.id;
     const searchParams = useSearchParams();
-    const [project, setProject] = useState<Project | null>(null);
-    const [progress, setProgress] = useState<ProjectProgress | null>(null);
+    
+    // SWR for project detail
+    const { data: project, error: projectError, isLoading: isProjectLoading, mutate: mutateProject } = 
+        useSWR<Project>(projectId ? `/projects/${projectId}` : null);
+    
+    // SWR for project progress
+    const { data: progress, mutate: mutateProgress } = 
+        useSWR<ProjectProgress>(projectId ? `/projects/${projectId}/progress` : null);
+
     const [isBOQUploadOpen, setIsBOQUploadOpen] = useState(false);
     const [isBOQViewerOpen, setIsBOQViewerOpen] = useState(false);
     const [isMembersModalOpen, setIsMembersModalOpen] = useState(false);
@@ -62,30 +70,12 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
     const diagramContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        fetchProjectDetail();
-    }, [projectId]);
-
-    const fetchProjectDetail = async () => {
-        try {
-            setLoading(true);
-            const data = await getProject(projectId);
-            setProject(data);
-            // Store globally for Navigation
-            if (typeof window !== 'undefined') {
-                localStorage.setItem('currentProjectName', data.name);
-            }
-            // Fetch progress
-            try {
-                const prog = await getProjectProgress(projectId);
-                setProgress(prog);
-            } catch { /* No progress data */ }
-        } catch (err) {
-            console.error("Failed to fetch project detail", err);
-            toast.error("Không thể tải thông tin dự án");
-        } finally {
-            setLoading(false);
+        if (project?.name) {
+            localStorage.setItem('currentProjectName', project.name);
         }
-    };
+    }, [project?.name]);
+
+    // fetchProjectDetail removed, using useSWR
 
     const handleCreateDiagram = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -102,7 +92,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             setNewDiagramName('');
             setNewDiagramDesc('');
             setShowCreateForm(false);
-            fetchProjectDetail();
+            mutateProject(); // Revalidate SWR
         } catch (err: unknown) {
             toast.error(extractErrorMessage(err, "Không thể tạo công trình. Vui lòng đăng nhập."));
         }
@@ -116,7 +106,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
             if (activeDiagramId === diagramId) {
                 setActiveDiagramId(null);
             }
-            fetchProjectDetail();
+            mutateProject(); // Revalidate SWR
         } catch (err) {
             toast.error("Không thể xóa công trình.");
         }
@@ -134,7 +124,7 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
         return amount.toLocaleString('vi-VN') + ' VNĐ';
     };
 
-    if (loading) {
+    if (isProjectLoading && !project) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="flex flex-col items-center gap-3">
@@ -170,18 +160,18 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                         onClick={() => setActiveDiagramId(null)}
                         className="text-gray-500 hover:text-blue-600 transition-colors"
                     >
-                        {project.name}
+                        {project?.name}
                     </button>
                     <ChevronRight className="h-3.5 w-3.5 text-gray-400" />
                     <span className="text-gray-900 font-medium">
-                        {project.diagrams?.find(d => d.id === activeDiagramId)?.name || 'Sơ đồ'}
+                        {project?.diagrams?.find((d: DiagramSummary) => d.id === activeDiagramId)?.name || 'Sơ đồ'}
                     </span>
                 </div>
                 <div ref={diagramContainerRef} className="relative flex-1 flex flex-col">
                     <SimpleDragTest
                         projectId={projectId}
                         diagramId={activeDiagramId}
-                        diagramName={project.diagrams?.find(d => d.id === activeDiagramId)?.name}
+                        diagramName={project.diagrams?.find((d: DiagramSummary) => d.id === activeDiagramId)?.name}
                     />
                     <PresenceCursors
                         diagramId={activeDiagramId}
@@ -364,7 +354,8 @@ export default function ProjectDetail({ params }: { params: Promise<{ id: string
                 onClose={() => setIsBOQUploadOpen(false)}
                 onSuccess={() => {
                     setIsBOQUploadOpen(false);
-                    fetchProjectDetail();
+                    mutateProject();
+                    mutateProgress();
                 }}
             />
             <ProjectBOQViewer

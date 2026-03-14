@@ -1,20 +1,12 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import useSWR from 'swr';
 import { LayoutGrid, ArrowRight, FolderGit2 } from 'lucide-react';
 import { getProjects, type Project } from '@/lib/api';
 
 export default function DiagramIndex() {
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        getProjects()
-            .then(setProjects)
-            .catch(() => { })
-            .finally(() => setLoading(false));
-    }, []);
+    const { data: projects = [], isLoading: loading } = useSWR<Project[]>('/projects', getProjects);
 
     // Collect all diagrams across projects
     const allDiagrams = projects.flatMap(p =>

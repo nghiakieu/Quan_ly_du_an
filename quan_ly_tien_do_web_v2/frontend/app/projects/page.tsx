@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText, Users, Upload, ListTodo, X } from 'lucide-react';
@@ -52,8 +53,9 @@ function ProjectLinkButton({ project, type, icon: Icon, colorClass, title, onUpd
 }
 
 export default function ProjectsDashboard() {
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(true);
+    const { mutate } = useSWRConfig();
+    const { data: projects = [], error, isLoading, mutate: mutateProjects } = useSWR<Project[]>('/projects/');
+    // loading state removed, using isLoading from SWR
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -70,22 +72,7 @@ export default function ProjectsDashboard() {
     const [boqUploadProjectId, setBoqUploadProjectId] = useState<number | null>(null);
     const [boqViewerProjectId, setBoqViewerProjectId] = useState<number | null>(null);
 
-    useEffect(() => {
-        fetchProjects();
-    }, []);
-
-    const fetchProjects = async () => {
-        try {
-            setLoading(true);
-            const data = await getProjects();
-            setProjects(data);
-        } catch (err: unknown) {
-            console.error("Failed to fetch projects", err);
-            toast.error(extractErrorMessage(err, "Không thể tải danh sách dự án. Kiểm tra Backend đã chạy trên port 8000 chưa."));
-        } finally {
-            setLoading(false);
-        }
-    };
+    // useEffect removed, SWR handles fetching automatically
 
     const handleCreateProject = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -102,7 +89,7 @@ export default function ProjectsDashboard() {
             toast.success("Tạo dự án thành công!");
             setFormData({ name: '', description: '', investor: '', total_budget: '', start_date: '', end_date: '' });
             setShowForm(false);
-            fetchProjects();
+            mutateProjects(); // Revalidate SWR cache
         } catch (err: unknown) {
             toast.error(extractErrorMessage(err, "Không thể tạo dự án. Vui lòng đăng nhập."));
         }
@@ -113,7 +100,7 @@ export default function ProjectsDashboard() {
         try {
             await deleteProject(id);
             toast.success("Đã xóa dự án!");
-            fetchProjects();
+            mutateProjects(); // Revalidate SWR cache
         } catch (err) {
             toast.error("Không thể xóa dự án.");
         }
@@ -140,7 +127,7 @@ export default function ProjectsDashboard() {
         return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
-    if (loading) {
+    if (isLoading && projects.length === 0) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="flex flex-col items-center gap-3">
@@ -294,7 +281,7 @@ export default function ProjectsDashboard() {
                                                         icon={Globe}
                                                         colorClass="text-blue-600 bg-blue-50 hover:bg-blue-100"
                                                         title="Bản đồ"
-                                                        onUpdate={fetchProjects}
+                                                        onUpdate={() => mutateProjects()}
                                                     />
                                                     <ProjectLinkButton
                                                         project={project}
@@ -302,7 +289,7 @@ export default function ProjectsDashboard() {
                                                         icon={FolderOpen}
                                                         colorClass="text-indigo-600 bg-indigo-50 hover:bg-indigo-100"
                                                         title="Hồ sơ Drive"
-                                                        onUpdate={fetchProjects}
+                                                        onUpdate={() => mutateProjects()}
                                                     />
                                                     <ProjectLinkButton
                                                         project={project}
@@ -310,7 +297,7 @@ export default function ProjectsDashboard() {
                                                         icon={BookOpenText}
                                                         colorClass="text-emerald-600 bg-emerald-50 hover:bg-emerald-100"
                                                         title="Nhật ký Báo cáo"
-                                                        onUpdate={fetchProjects}
+                                                        onUpdate={() => mutateProjects()}
                                                     />
                                                     {/* BOQ Upload icon - Admin only */}
                                                     {user?.role === 'admin' && (
@@ -466,7 +453,7 @@ export default function ProjectsDashboard() {
                     onClose={() => setBoqUploadProjectId(null)}
                     onSuccess={() => {
                         setBoqUploadProjectId(null);
-                        fetchProjects();
+                        mutateProjects();
                     }}
                 />
             )}

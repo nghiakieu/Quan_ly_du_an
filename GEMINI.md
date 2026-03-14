@@ -60,7 +60,8 @@ Vui lòng sử dụng các kỹ năng phù hợp nhất cho **Phát triển chun
 
 ## Hướng dẫn tùy chỉnh
 
-Thêm các hướng dẫn cụ thể cho dự án của bạn tại đây.
+1. **Meta-Skill**: Luôn kiểm tra và kích hoạt kỹ năng `using-superpowers` trước khi bắt đầu bất kỳ nhiệm vụ nào để đảm bảo tuân thủ quy trình chuẩn.
+2. **Kỷ luật TDD**: Ưu tiên sử dụng kỹ năng `test-driven-development` cho mọi thay đổi logic.
 
 ---
 *Được tạo bởi Antigravity IDE*

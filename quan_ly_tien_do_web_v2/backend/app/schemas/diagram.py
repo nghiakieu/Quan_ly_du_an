@@ -21,7 +21,6 @@ class Diagram(DiagramBase):
     id: int
     objects: Optional[str] = None
     cached_completed_value: Optional[float] = None
-    cached_plan_value: Optional[float] = None
     updated_at: Optional[datetime] = None
 
     class Config:

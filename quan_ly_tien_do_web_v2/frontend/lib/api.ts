@@ -107,9 +107,9 @@ export interface Project {
     created_at: string;
     updated_at: string;
     cached_progress_percent?: number;
+    cached_total_diagrams?: number;
     cached_completed_value?: number;
     cached_plan_value?: number;
-    cached_total_diagrams?: number;
     diagrams: DiagramSummary[];
 }
 

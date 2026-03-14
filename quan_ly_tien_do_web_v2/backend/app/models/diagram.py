@@ -21,7 +21,6 @@ class Diagram(Base):
     cached_progress_percent = Column(Float, nullable=True) # % tien do hoan thanh cua so do
     cached_target_value = Column(Float, nullable=True)     # Tong gia tri thiet ke
     cached_completed_value = Column(Float, nullable=True)  # Tong gia tri thuc te
-    cached_plan_value = Column(Float, nullable=True)       # Tong gia tri ke hoach (Status 0 + 1)
 
     # Relationships
     project = relationship("Project", back_populates="diagrams")

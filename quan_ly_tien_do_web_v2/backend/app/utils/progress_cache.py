@@ -23,8 +23,6 @@ def recalculate_diagram_progress(db: Session, diagram_id: int):
         diagram.cached_progress_percent = 100.0 if items and actual_val > 0 else 0.0
         
     diagram.cached_target_value = round(design_val, 2)
-    diagram.cached_completed_value = round(actual_val, 2)
-    diagram.cached_plan_value = round(plan_val, 2)
         
     db.commit()
 
@@ -52,8 +50,6 @@ def recalculate_project_progress(db: Session, project_id: int):
     else:
         project.cached_progress_percent = 0.0
         
-    project.cached_completed_value = round(total_actual_val, 2)
-    project.cached_plan_value = round(total_plan_val, 2)
     project.cached_total_diagrams = len(diagrams)
     
     db.commit()

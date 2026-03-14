@@ -32,6 +32,31 @@ def read_projects(
         if status:
             query = query.filter(models.Project.status == status)
         projects = query.offset(skip).limit(limit).all()
+        
+        # Calculate on-the-fly values for charts
+        for p in projects:
+            p_total_design = 0.0
+            p_total_actual = 0.0
+            p_total_plan = 0.0
+            
+            for d in p.diagrams:
+                # Calculate for each diagram
+                items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == d.id).all()
+                d.cached_target_value = sum((item.design_qty or 0) * (item.price or 0) for item in items)
+                d.cached_completed_value = sum((item.actual_qty or 0) * (item.price or 0) for item in items)
+                d.cached_plan_value = sum((item.plan_qty or 0) * (item.price or 0) for item in items)
+                
+                p_total_design += d.cached_target_value
+                p_total_actual += d.cached_completed_value
+                p_total_plan += d.cached_plan_value
+            
+            # Note: We don't save these to p.cached_... because those columns might not exist or we want to avoid DB writes.
+            # We just set them on the object so the schema can pick them up.
+            # However, if these fields are NOT in the model but ARE in the schema, 
+            # we can use them as transient attributes.
+            p.cached_completed_value = p_total_actual
+            p.cached_plan_value = p_total_plan
+
         return projects
     except Exception as e:
         import traceback

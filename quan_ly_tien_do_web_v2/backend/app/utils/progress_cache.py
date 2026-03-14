@@ -15,6 +15,7 @@ def recalculate_diagram_progress(db: Session, diagram_id: int):
     items = db.query(BOQItem).filter(BOQItem.diagram_id == diagram_id).all()
     design_val = sum(item.design_qty * item.price for item in items)
     actual_val = sum(item.actual_qty * item.price for item in items)
+    plan_val = sum(item.plan_qty * item.price for item in items)
     
     if design_val > 0:
         diagram.cached_progress_percent = round((actual_val / design_val) * 100, 2)
@@ -23,6 +24,7 @@ def recalculate_diagram_progress(db: Session, diagram_id: int):
         
     diagram.cached_target_value = round(design_val, 2)
     diagram.cached_completed_value = round(actual_val, 2)
+    diagram.cached_plan_value = round(plan_val, 2)
         
     db.commit()
 
@@ -37,11 +39,13 @@ def recalculate_project_progress(db: Session, project_id: int):
     diagrams = db.query(Diagram).filter(Diagram.project_id == project_id).all()
     total_design_val = 0.0
     total_actual_val = 0.0
+    total_plan_val = 0.0
     
     for d in diagrams:
         items = db.query(BOQItem).filter(BOQItem.diagram_id == d.id).all()
         total_design_val += sum(item.design_qty * item.price for item in items)
         total_actual_val += sum(item.actual_qty * item.price for item in items)
+        total_plan_val += sum(item.plan_qty * item.price for item in items)
         
     if total_design_val > 0:
         project.cached_progress_percent = round((total_actual_val / total_design_val) * 100, 2)
@@ -49,6 +53,7 @@ def recalculate_project_progress(db: Session, project_id: int):
         project.cached_progress_percent = 0.0
         
     project.cached_completed_value = round(total_actual_val, 2)
+    project.cached_plan_value = round(total_plan_val, 2)
     project.cached_total_diagrams = len(diagrams)
     
     db.commit()

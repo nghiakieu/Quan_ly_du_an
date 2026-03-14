@@ -29,6 +29,7 @@ class Project(Base):
     # Caching Progress
     cached_progress_percent = Column(Float, nullable=True)
     cached_completed_value = Column(Float, nullable=True)
+    cached_plan_value = Column(Float, nullable=True)
     cached_total_diagrams = Column(Integer, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

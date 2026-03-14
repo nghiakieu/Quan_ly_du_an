@@ -41,7 +41,13 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <span className="w-3 h-3 rounded-sm flex-shrink-0" style={{ background: entry.fill }} />
           <span className="text-gray-600 flex-1">{entry.name}</span>
           <span className="font-medium text-gray-800">{formatCurrency(Number(entry.value))}</span>
-        export default function ProjectDashboard({ project }: ProjectDashboardProps) {
+        </div>
+      ))}
+    </div>
+  );
+};
+
+export default function ProjectDashboard({ project }: ProjectDashboardProps) {
   // Tổng sản lượng cả dự án
   const totalContract = project.total_budget ||
     project.diagrams.reduce((acc, d) => acc + (d.cached_target_value || 0), 0);
@@ -180,15 +186,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
               <span className="text-base font-black text-rose-600">{formatCurrency(totalRemaining)}</span>
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
- text-sm">
-              Dự án chưa có công trình/hạng mục nào.
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>

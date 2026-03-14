@@ -31,12 +31,23 @@ def read_diagrams(
     """
     Retrieve diagrams.
     """
-    query = db.query(DiagramModel).options(
-        defer(DiagramModel.objects)
-    )
+    query = db.query(DiagramModel)
     if project_id is not None:
         query = query.filter(DiagramModel.project_id == project_id)
     diagrams = query.offset(skip).limit(limit).all()
+    
+    # Fully populate each diagram with boq_data string
+    for d in diagrams:
+        items = db.query(BOQItem).filter(BOQItem.diagram_id == d.id).all()
+        boq_list = []
+        for bi in items:
+            boq_list.append({
+                "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+                "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+                "unitPrice": bi.price, "order": bi.order
+            })
+        setattr(d, "boq_data", json.dumps(boq_list, ensure_ascii=False) if boq_list else "[]")
+        
     return diagrams
 
 @router.post("/", response_model=Diagram)

@@ -48,6 +48,16 @@ def read_projects(
                 d.cached_completed_value = sum((item.actual_qty or 0) * (item.price or 0) for item in items)
                 d.cached_plan_value = sum((item.plan_qty or 0) * (item.price or 0) for item in items)
                 
+                # IMPORTANT: Populate boq_data for the schema
+                boq_list = []
+                for bi in items:
+                    boq_list.append({
+                        "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+                        "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+                        "unitPrice": bi.price, "order": bi.order
+                    })
+                setattr(d, "boq_data", json.dumps(boq_list, ensure_ascii=False) if boq_list else "[]")
+                
                 p_total_design += d.cached_target_value
                 p_total_actual += d.cached_completed_value
                 p_total_plan += d.cached_plan_value
@@ -118,6 +128,16 @@ def read_project(
         d.cached_target_value = sum((item.design_qty or 0) * (item.price or 0) for item in items)
         d.cached_completed_value = sum((item.actual_qty or 0) * (item.price or 0) for item in items)
         d.cached_plan_value = sum((item.plan_qty or 0) * (item.price or 0) for item in items)
+        
+        # IMPORTANT: Populate boq_data for the schema
+        boq_list = []
+        for bi in items:
+            boq_list.append({
+                "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+                "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+                "unitPrice": bi.price, "order": bi.order
+            })
+        setattr(d, "boq_data", json.dumps(boq_list, ensure_ascii=False) if boq_list else "[]")
         
         p_total_design += d.cached_target_value
         p_total_actual += d.cached_completed_value

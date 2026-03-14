@@ -20,6 +20,7 @@ class DiagramUpdate(BaseModel):
 class Diagram(DiagramBase):
     id: int
     objects: Optional[str] = None
+    boq_data: Optional[str] = None
     cached_completed_value: Optional[float] = None
     updated_at: Optional[datetime] = None
 

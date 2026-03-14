@@ -34,6 +34,8 @@ class DiagramSummary(BaseModel):
     id: int
     name: str
     description: Optional[str] = None
+    objects: Optional[str] = None
+    boq_data: Optional[str] = None
     updated_at: Optional[datetime] = None
     cached_progress_percent: Optional[float] = None
     cached_target_value: Optional[float] = None

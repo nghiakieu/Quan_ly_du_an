@@ -1183,6 +1183,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const [localDiagramName, setLocalDiagramName] = useState<string>(diagramName || 'Sơ đồ thi công');
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
     const lastSavedData = React.useRef({ objects: '', boqData: '' });
+    const isSavingRef = React.useRef(false);
     const [syncMessage, setSyncMessage] = useState<string | null>(null);
     const isFirstLoad = React.useRef(true);
 
@@ -1262,9 +1263,18 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             try {
                 const msg = JSON.parse(event.data);
                 if (msg.event === "diagram_updated" || msg.event === "new_diagram") {
-                    console.log("[WS] Received update signal. Fetching new data...");
+                    console.log("[WS] Received update signal.");
+                    
+                    // CRITICAL: If we are CURRENTLY saving, ignore the update signal
+                    // to prevent fetching "old" data before our save is fully finished.
+                    if (isSavingRef.current) {
+                        console.log("[WS] Ignoring update signal because we are currently saving...");
+                        return;
+                    }
+
                     // Only fetch if we are not actively dragging to avoid interrupting user
                     if (!isDraggingRef.current) {
+                        console.log("[WS] Fetching new data due to update signal...");
                         setSyncMessage("Dữ liệu vừa được cập nhật bởi người dùng khác...");
                         fetchDiagramData();
                         setTimeout(() => setSyncMessage(null), 3000);
@@ -1288,16 +1298,31 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     }, [currentDiagramId]);
 
     const handleForceSave = async (customObjects?: BoxObject[], customBoqData?: any[]) => {
+        if (isSavingRef.current) {
+            console.log("[Save] Already saving, skipping redundant request.");
+            return;
+        }
+
         const objectsToSave = customObjects || objects;
         const boqToSave = customBoqData || boqData;
         
         const currentObjectsStr = JSON.stringify(objectsToSave);
         const currentBoqStr = JSON.stringify(boqToSave);
 
+        // Don't save if it's the same as what we last saved
+        if (currentObjectsStr === lastSavedData.current.objects && 
+            currentBoqStr === lastSavedData.current.boqData) {
+            console.log("[Save] No changes detected, skipping save.");
+            return;
+        }
+
         const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
         if (!token) return;
 
+        isSavingRef.current = true;
         setSaveStatus('saving');
+        console.log(`[Save] Starting save for diagram ${currentDiagramId || 'NEW'}...`);
+
         const payload: any = {
             objects: currentObjectsStr,
             boq_data: currentBoqStr,
@@ -1315,24 +1340,38 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             }
 
             if (data) {
+                console.log("[Save] Success! Received ID:", data.id);
                 if (!currentDiagramId) setCurrentDiagramId(data.id);
+                if (data.updated_at) setLastUpdated(data.updated_at);
+                
+                // Update tracker IMMEDIATELY
                 lastSavedData.current = {
                     objects: currentObjectsStr,
                     boqData: currentBoqStr
                 };
+                
                 setSaveStatus('saved');
+                // Return data for chain calls
                 return data;
             }
         } catch (err) {
-            console.error("Manual save failed", err);
+            console.error("[Save] Manual save failed", err);
             setSaveStatus('error');
             throw err;
+        } finally {
+            // Delay releasing the lock slightly to let backend/ws settle
+            setTimeout(() => {
+                isSavingRef.current = false;
+            }, 1000);
         }
     };
 
     // 2. Debounced Auto-Save
     React.useEffect(() => {
-        if (isFirstLoad.current) return;
+        if (isFirstLoad.current || isSavingRef.current) {
+            // console.log("[AutoSave] Busy or first load, skipping check.");
+            return;
+        }
 
         const currentObjectsStr = JSON.stringify(objects);
         const currentBoqStr = JSON.stringify(boqData);
@@ -1343,19 +1382,16 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             return;
         }
 
-        // Check auth token before attempting save
-        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
-        if (!token) return;
-
-        setSaveStatus('saving');
+        console.log("[AutoSave] Change detected. Scheduling save in 2s...");
 
         const timer = setTimeout(async () => {
+            if (isSavingRef.current) return;
             try {
                 await handleForceSave();
             } catch (err) {
                 // Error handled in handleForceSave
             }
-        }, 2000); // Increased debounce to 2s for stability
+        }, 2000);
 
         return () => clearTimeout(timer);
     }, [objects, boqData, currentDiagramId]);

@@ -1170,6 +1170,15 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     };
 
     const [currentDiagramId, setCurrentDiagramId] = useState<number | null>(propDiagramId ?? null);
+
+    // Sync currentDiagramId when prop changes from parent
+    React.useEffect(() => {
+        if (propDiagramId !== undefined && propDiagramId !== currentDiagramId) {
+            console.log(`[Sync] propDiagramId changed: ${propDiagramId}. Updating state...`);
+            setCurrentDiagramId(propDiagramId);
+            isFirstLoad.current = true; // Trigger data fetch for new ID
+        }
+    }, [propDiagramId]);
     const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'error' | 'idle'>('idle');
     const [localDiagramName, setLocalDiagramName] = useState<string>(diagramName || 'Sơ đồ thi công');
     const [lastUpdated, setLastUpdated] = useState<string | null>(null);
@@ -1229,10 +1238,10 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         }
     };
 
-    // 1. Auto-Load on Mount
+    // 1. Auto-Load on Mount or ID change
     React.useEffect(() => {
         fetchDiagramData();
-    }, []);
+    }, [currentDiagramId]);
 
     // 1.5 Real-time Websocket Connection
     React.useEffect(() => {
@@ -1278,6 +1287,49 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         };
     }, [currentDiagramId]);
 
+    const handleForceSave = async (customObjects?: BoxObject[], customBoqData?: any[]) => {
+        const objectsToSave = customObjects || objects;
+        const boqToSave = customBoqData || boqData;
+        
+        const currentObjectsStr = JSON.stringify(objectsToSave);
+        const currentBoqStr = JSON.stringify(boqToSave);
+
+        const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+        if (!token) return;
+
+        setSaveStatus('saving');
+        const payload: any = {
+            objects: currentObjectsStr,
+            boq_data: currentBoqStr,
+            project_id: projectId ? parseInt(projectId) : null
+        };
+
+        try {
+            let data;
+            if (currentDiagramId) {
+                data = await updateDiagram(currentDiagramId, payload);
+            } else {
+                payload.name = localDiagramName;
+                payload.description = 'Saved manually or via import';
+                data = await createDiagram(payload);
+            }
+
+            if (data) {
+                if (!currentDiagramId) setCurrentDiagramId(data.id);
+                lastSavedData.current = {
+                    objects: currentObjectsStr,
+                    boqData: currentBoqStr
+                };
+                setSaveStatus('saved');
+                return data;
+            }
+        } catch (err) {
+            console.error("Manual save failed", err);
+            setSaveStatus('error');
+            throw err;
+        }
+    };
+
     // 2. Debounced Auto-Save
     React.useEffect(() => {
         if (isFirstLoad.current) return;
@@ -1298,38 +1350,12 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         setSaveStatus('saving');
 
         const timer = setTimeout(async () => {
-            const payload: any = {
-                objects: currentObjectsStr,
-                boq_data: currentBoqStr,
-                project_id: projectId ? parseInt(projectId) : null
-            };
-
             try {
-                let data;
-                if (currentDiagramId) {
-                    // Update existing
-                    data = await updateDiagram(currentDiagramId, payload);
-                } else {
-                    // Create new
-                    payload.name = localDiagramName;
-                    payload.description = 'Auto-saved';
-                    data = await createDiagram(payload);
-                }
-
-                if (data) {
-                    if (!currentDiagramId) setCurrentDiagramId(data.id);
-
-                    lastSavedData.current = {
-                        objects: currentObjectsStr,
-                        boqData: currentBoqStr
-                    };
-                    setSaveStatus('saved');
-                }
+                await handleForceSave();
             } catch (err) {
-                console.error("Auto-save failed", err);
-                setSaveStatus('error');
+                // Error handled in handleForceSave
             }
-        }, 1000); // Debounce 1s
+        }, 2000); // Increased debounce to 2s for stability
 
         return () => clearTimeout(timer);
     }, [objects, boqData, currentDiagramId]);
@@ -1478,7 +1504,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
             return;
         }
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
             try {
                 const raw = ev.target?.result as string;
                 const parsed = JSON.parse(raw);
@@ -1486,13 +1512,28 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     alert('File không đúng định dạng sơ đồ!');
                     return;
                 }
-                isFirstLoad.current = true; // Prevent auto-save conflict during restore
-                setObjects(parsed.objects || []);
-                setBoqData(parsed.boq_data || []);
+                
+                const newObjects = parsed.objects || [];
+                const newBoqData = parsed.boq_data || [];
+                
+                // 1. Update component state
+                setObjects(newObjects);
+                setBoqData(newBoqData);
                 setSelectedIds(new Set());
-                setTimeout(() => { isFirstLoad.current = false; }, 100);
-                alert(`Nhập thành công! ${(parsed.objects || []).length} objects, ${(parsed.boq_data || []).length} BOQ items.`);
-            } catch {
+                
+                // 2. Block auto-save momentarily during state update
+                isFirstLoad.current = true; 
+                
+                // 3. Force save to server immediately
+                try {
+                    await handleForceSave(newObjects, newBoqData);
+                    alert(`Nhập và lưu thành công! ${newObjects.length} objects, ${newBoqData.length} BOQ items.`);
+                } catch (saveErr) {
+                    alert('Dữ liệu đã nhập vào giao diện nhưng lỗi khi lưu lên server. Vui lòng thử nhấn lưu lại.');
+                } finally {
+                    setTimeout(() => { isFirstLoad.current = false; }, 500);
+                }
+            } catch (e) {
                 alert('Lỗi đọc file JSON. Vui lòng kiểm tra lại!');
             }
         };

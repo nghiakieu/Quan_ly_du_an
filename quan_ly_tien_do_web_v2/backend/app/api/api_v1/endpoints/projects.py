@@ -27,7 +27,7 @@ def read_projects(
     try:
         query = db.query(models.Project).options(
             defer(models.Project.boq_data),
-            joinedload(models.Project.diagrams).defer(models.Diagram.objects)
+            joinedload(models.Project.diagrams)
         )
         if status:
             query = query.filter(models.Project.status == status)
@@ -101,7 +101,7 @@ def read_project(
     """
     project = db.query(models.Project).options(
         defer(models.Project.boq_data),
-        joinedload(models.Project.diagrams).defer(models.Diagram.objects)
+        joinedload(models.Project.diagrams)
     ).filter(models.Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")

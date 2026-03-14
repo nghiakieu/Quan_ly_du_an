@@ -26,7 +26,6 @@ def read_projects(
     """
     try:
         query = db.query(models.Project).options(
-            defer(models.Project.boq_data),
             joinedload(models.Project.diagrams)
         )
         if status:
@@ -39,6 +38,9 @@ def read_projects(
             p_total_actual = 0.0
             p_total_plan = 0.0
             
+            # Load project master BOQ if it exists to get total design value context
+            # but usually we aggregate from diagrams for progress
+            
             for d in p.diagrams:
                 # Calculate for each diagram
                 items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == d.id).all()
@@ -50,12 +52,12 @@ def read_projects(
                 p_total_actual += d.cached_completed_value
                 p_total_plan += d.cached_plan_value
             
-            # Note: We don't save these to p.cached_... because those columns might not exist or we want to avoid DB writes.
-            # We just set them on the object so the schema can pick them up.
-            # However, if these fields are NOT in the model but ARE in the schema, 
-            # we can use them as transient attributes.
+            # Set transient attributes for the schema
             p.cached_completed_value = p_total_actual
             p.cached_plan_value = p_total_plan
+            # If total_budget is not set, use total design from diagrams
+            if not p.total_budget and p_total_design > 0:
+                p.total_budget = p_total_design
 
         return projects
     except Exception as e:
@@ -100,11 +102,32 @@ def read_project(
     Get project by ID with diagrams list.
     """
     project = db.query(models.Project).options(
-        defer(models.Project.boq_data),
         joinedload(models.Project.diagrams)
     ).filter(models.Project.id == project_id).first()
+    
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
+        
+    p_total_design = 0.0
+    p_total_actual = 0.0
+    p_total_plan = 0.0
+    
+    for d in project.diagrams:
+        # Calculate for each diagram
+        items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == d.id).all()
+        d.cached_target_value = sum((item.design_qty or 0) * (item.price or 0) for item in items)
+        d.cached_completed_value = sum((item.actual_qty or 0) * (item.price or 0) for item in items)
+        d.cached_plan_value = sum((item.plan_qty or 0) * (item.price or 0) for item in items)
+        
+        p_total_design += d.cached_target_value
+        p_total_actual += d.cached_completed_value
+        p_total_plan += d.cached_plan_value
+    
+    project.cached_completed_value = p_total_actual
+    project.cached_plan_value = p_total_plan
+    if not project.total_budget and p_total_design > 0:
+        project.total_budget = p_total_design
+        
     return project
 
 @router.get("/{project_id}/progress")

@@ -128,11 +128,10 @@ export default function ProjectDashboard({ project }: ProjectDashboardProps) {
                             x={0}
                             y={0}
                             dy={16}
-                            textAnchor="end"
+                            textAnchor="middle"
                             fill={isTotal ? '#1e40af' : '#64748b'}
                             fontSize={isTotal ? 12 : 11}
                             fontWeight={isTotal ? 700 : 500}
-                            transform="rotate(-35)"
                           >
                             {payload.value}
                           </text>

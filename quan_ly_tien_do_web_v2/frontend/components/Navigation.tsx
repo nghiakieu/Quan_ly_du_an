@@ -21,7 +21,8 @@ export default function Navigation() {
                 <div className="flex justify-between h-14">
                     {/* Left: Logo + Nav */}
                     <div className="flex items-center">
-                        <Link href="/projects" className="flex-shrink-0 flex items-center mr-8">
+                        <Link href="/projects" className="flex-shrink-0 flex items-center mr-8 gap-2">
+                            <img src="/icon.png" alt="Logo" className="h-8 w-8 object-contain" />
                             <h1 className="text-lg font-bold text-blue-600">Quản lý Dự Án</h1>
                         </Link>
 

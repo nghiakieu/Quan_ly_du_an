@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FolderGit2, LayoutGrid, Users, LogIn, LogOut } from 'lucide-react';
+import { FolderGit2, LayoutGrid, Users, LogIn, LogOut, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 export default function Navigation() {
@@ -49,6 +49,18 @@ export default function Navigation() {
                                     </Link>
                                 );
                             })}
+
+                            {/* Specialized Menu: Danh mục công việc - only visible when inside a diagram/project view */}
+                            {(pathname?.startsWith('/projects/') || pathname?.startsWith('/diagram')) && (
+                                <button
+                                    onClick={() => window.dispatchEvent(new CustomEvent('open-work-item-list'))}
+                                    className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                                    title="Danh mục công việc / Bulk Update ID"
+                                >
+                                    <ClipboardList className="h-4 w-4 mr-1.5" />
+                                    Danh mục công việc
+                                </button>
+                            )}
                         </div>
                     </div>
 
@@ -93,12 +105,23 @@ export default function Navigation() {
                                     ? 'text-blue-700'
                                     : 'text-gray-500 hover:text-gray-900'
                                     }`}
-                            >
+                             >
                                 <Icon className="h-5 w-5 mb-0.5" />
                                 {item.label}
                             </Link>
                         );
                     })}
+
+                    {/* Mobile version of the button */}
+                    {(pathname?.startsWith('/projects/') || pathname?.startsWith('/diagram')) && (
+                        <button
+                            onClick={() => window.dispatchEvent(new CustomEvent('open-work-item-list'))}
+                            className="flex flex-col items-center px-3 py-1.5 text-xs font-medium rounded-md text-gray-500 hover:text-gray-900"
+                        >
+                            <ClipboardList className="h-5 w-5 mb-0.5" />
+                            Danh mục
+                        </button>
+                    )}
                 </div>
             </div>
         </nav>

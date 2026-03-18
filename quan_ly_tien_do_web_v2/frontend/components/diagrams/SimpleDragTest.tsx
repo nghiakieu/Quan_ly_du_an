@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { useAuth } from '@/lib/auth';
 import { syncDiagramBOQ, extractErrorMessage, getDiagrams, getDiagram, createDiagram, updateDiagram } from '@/lib/api';
 import BOQSyncReport from '../BOQSyncReport';
+import WorkItemListModal from './WorkItemListModal';
 import { toast } from 'sonner';
 
 /** Segment for progressType 'segments' (e.g. trụ thi công theo đợt) */
@@ -19,7 +20,7 @@ export interface BoxObjectSegment {
     status: 'not_started' | 'in_progress' | 'completed';
 }
 
-interface BoxObject {
+export interface BoxObject {
     id: string;
     x: number;
     y: number;
@@ -142,6 +143,7 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const touchState = React.useRef({ isTouching: false, type: 'none', startDist: 0, lastX: 0, lastY: 0, startViewX: 0, startViewY: 0, startScale: 1 });
     const lastMiddleClickTime = React.useRef(0);
     const [isPanelOpen, setIsPanelOpen] = useState(false); // Mobile sidebar toggle state
+    const [isWorkItemListOpen, setIsWorkItemListOpen] = useState(false);
 
     // Helper: Get Bounding Box
     const getObjBounds = (obj: BoxObject) => {
@@ -1577,6 +1579,15 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
         e.target.value = ''; // Reset input
     };
 
+    // Listen for custom event from Navigation
+    React.useEffect(() => {
+        const handleOpenWorkItemList = () => {
+            setIsWorkItemListOpen(true);
+        };
+        window.addEventListener('open-work-item-list', handleOpenWorkItemList);
+        return () => window.removeEventListener('open-work-item-list', handleOpenWorkItemList);
+    }, []);
+
     return (
         <div className="w-full h-full min-h-[500px] bg-gray-100 relative flex overflow-hidden">
             {/* Mobile Toggle Button (Floating) */}
@@ -2561,6 +2572,17 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     </div>
                 </div>
             )}
+
+            <WorkItemListModal
+                isOpen={isWorkItemListOpen}
+                onClose={() => setIsWorkItemListOpen(false)}
+                objects={objects}
+                onUpdateObjects={(updated) => {
+                    setObjects(updated);
+                    // Force save after bulk update
+                    handleForceSave(updated);
+                }}
+            />
         </div >
     );
 }

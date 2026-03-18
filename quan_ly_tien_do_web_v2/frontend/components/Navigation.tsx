@@ -51,7 +51,7 @@ export default function Navigation() {
                             })}
 
                             {/* Specialized Menu: Danh mục công việc - only visible when inside a diagram/project view */}
-                            {(pathname?.startsWith('/projects/') || pathname?.startsWith('/diagram')) && (
+                            {(pathname?.startsWith('/projects/') || (pathname?.startsWith('/projects') && pathname !== '/projects') || pathname?.startsWith('/diagram/')) && (
                                 <button
                                     onClick={() => window.dispatchEvent(new CustomEvent('open-work-item-list'))}
                                     className="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap text-gray-600 hover:bg-gray-50 hover:text-gray-900"
@@ -113,7 +113,7 @@ export default function Navigation() {
                     })}
 
                     {/* Mobile version of the button */}
-                    {(pathname?.startsWith('/projects/') || pathname?.startsWith('/diagram')) && (
+                    {(pathname?.startsWith('/projects/') || (pathname?.startsWith('/projects') && pathname !== '/projects') || pathname?.startsWith('/diagram/')) && (
                         <button
                             onClick={() => window.dispatchEvent(new CustomEvent('open-work-item-list'))}
                             className="flex flex-col items-center px-3 py-1.5 text-xs font-medium rounded-md text-gray-500 hover:text-gray-900"

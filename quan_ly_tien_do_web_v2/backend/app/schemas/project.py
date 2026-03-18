@@ -5,7 +5,7 @@ from datetime import datetime
 class ProjectBase(BaseModel):
     name: str
     description: Optional[str] = None
-    status: Optional[str] = "planning"
+    status: Optional[str] = "active"
     investor: Optional[str] = None
     total_budget: Optional[float] = None
     start_date: Optional[datetime] = None

@@ -3,6 +3,7 @@
 import React from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Project, DiagramSummary } from '@/lib/api';
+import RiskDashboard from '@/components/RiskDashboard';
 import {
   BarChart,
   Bar,
@@ -187,6 +188,11 @@ export default function ProjectDashboard({ project }: ProjectDashboardProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Risk Dashboard compact — top 3 rủi ro của dự án */}
+      <div className="rounded-2xl overflow-hidden bg-slate-900/5 ring-1 ring-slate-900/10">
+        <RiskDashboard projectId={project.id} compact />
+      </div>
     </div>
   );
 }

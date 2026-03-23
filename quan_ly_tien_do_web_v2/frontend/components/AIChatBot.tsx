@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, X, Send, Sparkles, Loader2, Settings, Trash2, RefreshCw, AlertTriangle, ChevronDown, Plus, MessageSquare, Clock } from 'lucide-react';
+import { Bot, X, Send, Sparkles, Loader2, Settings, Trash2, RefreshCw, AlertTriangle, ChevronDown, Plus, MessageSquare, Clock, FileDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { api, extractErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
@@ -73,6 +73,7 @@ export default function AIChatBot() {
     const [tempApiKey, setTempApiKey] = useState('');
     const [riskData, setRiskData] = useState<RiskAnalysis | null>(null);
     const [isLoadingRisk, setIsLoadingRisk] = useState(false);
+    const [isExporting, setIsExporting] = useState(false);
     // Phase 4: conversation persistence
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
@@ -302,7 +303,44 @@ export default function AIChatBot() {
         } catch (error: any) {
             toast.error(error.response?.data?.detail || "Lỗi khi đồng bộ dữ liệu.");
         } finally {
+        } finally {
             setIsSyncing(false);
+        }
+    };
+
+    const handleExportReport = async () => {
+        setIsExporting(true);
+        try {
+            const res = await api.post('/ai/generate-report', {
+                project_id: null,
+                api_key: apiKey || null
+            }, {
+                responseType: 'blob'
+            });
+            
+            const url = window.URL.createObjectURL(new Blob([res.data]));
+            const link = document.createElement('a');
+            link.href = url;
+            const contentDisposition = res.headers['content-disposition'];
+            let fileName = 'Bao_cao_Du_an.docx';
+            if (contentDisposition) {
+                const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (fileNameMatch && fileNameMatch.length === 2) {
+                    fileName = fileNameMatch[1];
+                } else {
+                    const idx = contentDisposition.indexOf('filename=');
+                    if (idx >= 0) fileName = contentDisposition.slice(idx + 9).replace(/"/g, '');
+                }
+            }
+            link.setAttribute('download', fileName);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            toast.success("Đã tải xuống báo cáo!");
+        } catch (error: any) {
+            toast.error("Lỗi khi xuất báo cáo: Vui lòng kiểm tra lại API Key.");
+        } finally {
+            setIsExporting(false);
         }
     };
 
@@ -372,6 +410,14 @@ export default function AIChatBot() {
                                 title="Đồng bộ dữ liệu mới"
                             >
                                 <RefreshCw className={`h-4 w-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                            </button>
+                            <button
+                                onClick={handleExportReport}
+                                disabled={isExporting}
+                                className="text-blue-100 p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors disabled:opacity-50"
+                                title="Xuất báo cáo tiến độ (DOCX)"
+                            >
+                                {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
                             </button>
                             <button
                                 onClick={() => setShowSettings(!showSettings)}

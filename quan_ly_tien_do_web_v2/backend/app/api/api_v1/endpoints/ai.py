@@ -1227,3 +1227,184 @@ def update_conversation_title(
     conv.title = title
     db.commit()
     return {"id": conv.id, "title": conv.title}
+
+
+# ============================================================
+# PHASE 5: AI EXPORT & REPORT ENDPOINTS
+# ============================================================
+
+class ReportRequest(BaseModel):
+    project_id: Optional[int] = None
+    api_key: str | None = None
+
+@router.post("/generate-report")
+def generate_report(
+    request: ReportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """
+    Generate a docx report summarizing project progress and risks.
+    """
+    import io
+    import json
+    from docx import Document
+    from docx.shared import Pt, Inches
+
+    api_key_to_use = request.api_key or settings.GEMINI_API_KEY
+    if not api_key_to_use:
+        raise HTTPException(status_code=400, detail="Gemini API key is missing.")
+    
+    genai.configure(api_key=api_key_to_use)
+    # 1. Fetch summarized context
+    context_str = get_summarized_context(db, request.project_id)
+    
+    # 2. Prepare prompt
+    prompt = f"""
+Bạn là chuyên gia quản lý dự án xây dựng. Dựa trên dữ liệu sau đây, hãy viết một báo cáo phân tích tiến độ, rủi ro và các đề xuất hành động.
+Yêu cầu trả về DUY NHẤT một chuỗi JSON chuẩn (không chứa code block markdown kiểu ```json) với cấu trúc sau:
+{{
+  "title": "Báo cáo tiến độ cập nhật...",
+  "summary": "Tóm tắt ngắn gọn tình hình dự án (3-5 câu)",
+  "risks": [
+     "Rủi ro 1: ...",
+     "Rủi ro 2: ..."
+  ],
+  "recommendations": [
+     "Đề xuất 1: ...",
+     "Đề xuất 2: ..."
+  ],
+  "highlights": [
+     "Điểm nổi bật 1",
+     "Điểm nổi bật 2"
+  ]
+}}
+
+--- DỮ LIỆU DỰ ÁN ---
+{context_str}
+"""
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    response = model.generate_content(prompt)
+    
+    # 3. Parse JSON
+    try:
+        res_text = response.text.strip()
+        if res_text.startswith("```json"):
+            res_text = res_text[7:]
+        if res_text.endswith("```"):
+            res_text = res_text[:-3]
+            
+        data = json.loads(res_text.strip())
+    except Exception as e:
+        print("Lỗi parse JSON report Gemini:", e)
+        print("Raw response:", response.text)
+        # Fallback dictionary if parsing fails
+        data = {
+            "title": "Báo cáo Tiến độ Dự án",
+            "summary": "Không thể tổng hợp tự động do lỗi định dạng từ AI.",
+            "risks": [],
+            "recommendations": [],
+            "highlights": []
+        }
+
+    # 4. Generate DOCX
+    doc = Document()
+    doc.add_heading(data.get("title", 'Báo cáo Dự án'), 0)
+    
+    doc.add_heading('Tóm tắt chung', level=1)
+    p_summary = doc.add_paragraph(data.get("summary", ""))
+    
+    highlights = data.get("highlights", [])
+    if highlights:
+        doc.add_heading('Điểm Nổi Bật', level=1)
+        for h in highlights:
+            doc.add_paragraph(h, style='List Bullet')
+
+    risks = data.get("risks", [])
+    if risks:
+        doc.add_heading('Rủi ro Tồn Động', level=1)
+        for r in risks:
+            doc.add_paragraph(r, style='List Bullet')
+            
+    recommendations = data.get("recommendations", [])
+    if recommendations:
+        doc.add_heading('Đề Xuất Hành Động', level=1)
+        for rec in recommendations:
+            doc.add_paragraph(rec, style='List Bullet')
+            
+    # Save to BytesIO
+    file_stream = io.BytesIO()
+    doc.save(file_stream)
+    file_stream.seek(0)
+    
+    file_name = f"Report_{datetime.now().strftime('%Y%m%d_%H%M')}.docx"
+    
+    return StreamingResponse(
+        file_stream,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f"attachment; filename={file_name}"}
+    )
+
+@router.post("/chart-data")
+def generate_chart_data(
+    request: ReportRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """
+    Generate JSON chart data analyzing the project progress and limits using AI.
+    """
+    import json
+    
+    api_key_to_use = request.api_key or settings.GEMINI_API_KEY
+    if not api_key_to_use:
+        raise HTTPException(status_code=400, detail="Gemini API key is missing.")
+    
+    genai.configure(api_key=api_key_to_use)
+    # Fetch summarized context
+    context_str = get_summarized_context(db, request.project_id)
+    
+    prompt = f"""
+Bạn là chuyên gia phân tích dữ liệu dự án xây dựng. Dựa trên dữ liệu dưới đây, hãy tạo dữ liệu biểu đồ phân tích tiến độ, chất lượng, rủi ro, hoặc tài chính.
+Yêu cầu trả về DUY NHẤT một mảng JSON chuẩn (không chứa markdown ```json), mỗi phần tử là cấu trúc cho một biểu đồ (tối ưu chỉ xuất 2 biểu đồ quan trọng nhất):
+[
+  {{
+    "id": "boq_progress",
+    "title": "Sản lượng cấu kiện (Kế hoạch vs Thực tế)",
+    "type": "bar",
+    "data": [
+      {{"name": "Trụ T1", "plan": 100, "actual": 80}},
+      {{"name": "Trụ T2", "plan": 100, "actual": 90}}
+    ]
+  }},
+  {{
+    "id": "task_status",
+    "title": "Trạng thái công việc Kanban",
+    "type": "pie",
+    "data": [
+      {{"name": "To Do", "value": 10}},
+      {{"name": "In Progress", "value": 5}},
+      {{"name": "Done", "value": 15}}
+    ]
+  }}
+]
+
+DỮ LIỆU DỰ ÁN:
+{context_str}
+"""
+    model = genai.GenerativeModel('gemini-2.5-flash')
+    response = model.generate_content(prompt)
+    
+    try:
+        res_text = response.text.strip()
+        if res_text.startswith("```json"):
+            res_text = res_text[7:]
+        if res_text.endswith("```"):
+            res_text = res_text[:-3]
+        data = json.loads(res_text.strip())
+        return {"charts": data}
+    except Exception as e:
+        print("Lỗi parse JSON chart Gemini:", e)
+        print("Raw response:", response.text)
+        return {"charts": []}
+

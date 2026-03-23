@@ -6,3 +6,4 @@ from .task import Task
 from .user import User
 from .boq import BOQItem
 from .chat import ChatRoom, ChatMessage, ChatParticipant
+from .ai_conversation import AIConversation, AIMessage

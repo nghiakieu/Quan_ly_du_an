@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Bot, X, Send, Sparkles, Loader2, Settings, Trash2, RefreshCw, AlertTriangle, ChevronDown } from 'lucide-react';
+import { Bot, X, Send, Sparkles, Loader2, Settings, Trash2, RefreshCw, AlertTriangle, ChevronDown, Plus, MessageSquare, Clock } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { api, extractErrorMessage } from '@/lib/api';
 import { toast } from 'sonner';
@@ -11,6 +11,15 @@ interface Message {
     role: 'user' | 'ai';
     content: string;
     streaming?: boolean; // true while chunk is being received
+}
+
+interface Conversation {
+    id: number;
+    title: string;
+    project_id: number | null;
+    created_at: string;
+    updated_at: string;
+    message_count: number;
 }
 
 interface Risk {
@@ -29,6 +38,7 @@ interface RiskAnalysis {
     info: number;
 }
 
+// Legacy key (kept to migrate old users - no longer written to)
 const GLOBAL_HISTORY_KEY = 'ai_global_chat_history';
 
 const SUGGESTED_QUESTIONS = [
@@ -47,22 +57,26 @@ function getApiBaseUrl(): string {
 
 export default function AIChatBot() {
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: 'welcome',
-            role: 'ai',
-            content: 'Chào bạn! Mình là AI Trợ lý Quản lý Dự án. Mình đã đọc toàn bộ dữ liệu (Khối lượng, Tiến độ Kanban, Sơ đồ thi công, Trụ/Nhịp/Đốt) của hệ thống.\n\nBạn muốn biết thông tin gì cứ hỏi mình nhé!'
-        }
-    ]);
+    const WELCOME_MSG: Message = {
+        id: 'welcome',
+        role: 'ai',
+        content: 'Chào bạn! Mình là AI Trợ lý Quản lý Dự án. Mình đã đọc toàn bộ dữ liệu (Khối lượng, Tiến độ Kanban, Sơ đồ thi công, Trụ/Nhịp/Đốt) của hệ thống.\n\nBạn muốn biết thông tin gì cứ hỏi mình nhé!'
+    };
+    const [messages, setMessages] = useState<Message[]>([WELCOME_MSG]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
     const [showSuggestions, setShowSuggestions] = useState(true);
+    const [showConversations, setShowConversations] = useState(false);
     const [apiKey, setApiKey] = useState('');
     const [tempApiKey, setTempApiKey] = useState('');
     const [riskData, setRiskData] = useState<RiskAnalysis | null>(null);
     const [isLoadingRisk, setIsLoadingRisk] = useState(false);
+    // Phase 4: conversation persistence
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [currentConversationId, setCurrentConversationId] = useState<number | null>(null);
+    const [isLoadingConversations, setIsLoadingConversations] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -70,24 +84,40 @@ export default function AIChatBot() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
 
-    // Load chat history from localStorage
-    useEffect(() => {
-        const savedHistory = localStorage.getItem(GLOBAL_HISTORY_KEY);
-        if (savedHistory) {
-            try {
-                setMessages(JSON.parse(savedHistory));
-            } catch (e) {
-                console.error('Lỗi đọc lịch sử chat AI');
-            }
+    // Phase 4: Load conversation list from API
+    const loadConversations = useCallback(async () => {
+        setIsLoadingConversations(true);
+        try {
+            const res = await api.get('/ai/conversations');
+            setConversations(res.data);
+        } catch (e) {
+            console.error('Lỗi tải danh sách hội thoại');
+        } finally {
+            setIsLoadingConversations(false);
         }
     }, []);
 
-    // Save history & scroll on message change
+    // Phase 4: Load messages from a conversation
+    const loadConversationMessages = useCallback(async (convId: number) => {
+        try {
+            const res = await api.get(`/ai/conversations/${convId}/messages`);
+            const msgs: Message[] = res.data.messages.map((m: any) => ({
+                id: String(m.id),
+                role: m.role as 'user' | 'ai',
+                content: m.content,
+            }));
+            setMessages([WELCOME_MSG, ...msgs]);
+            setCurrentConversationId(convId);
+            setShowConversations(false);
+            setShowSuggestions(false);
+        } catch (e) {
+            toast.error('Không thể tải hội thoại này');
+        }
+    }, []);
+
+    // Scroll on message change
     useEffect(() => {
         scrollToBottom();
-        // Only persist non-streaming messages
-        const persistent = messages.filter(m => !m.streaming);
-        localStorage.setItem(GLOBAL_HISTORY_KEY, JSON.stringify(persistent));
     }, [messages]);
 
     useEffect(() => {
@@ -101,6 +131,10 @@ export default function AIChatBot() {
             setTempApiKey(savedKey);
         }
     }, []);
+
+    useEffect(() => {
+        if (isOpen) loadConversations();
+    }, [isOpen, loadConversations]);
 
     // Load risk analysis when chat opens
     const loadRiskAnalysis = useCallback(async () => {
@@ -159,6 +193,7 @@ export default function AIChatBot() {
                     message: userText,
                     api_key: apiKey || undefined,
                     history: recentHistory,
+                    conversation_id: currentConversationId, // Phase 4
                 }),
                 signal: controller.signal,
             });
@@ -199,6 +234,12 @@ export default function AIChatBot() {
                                         : m
                                 )
                             );
+                            // Phase 4: update conversation ID from server
+                            if (parsed.conversation_id) {
+                                setCurrentConversationId(parsed.conversation_id);
+                                // Refresh conversation list silently
+                                loadConversations();
+                            }
                             break;
                         }
 
@@ -267,12 +308,36 @@ export default function AIChatBot() {
 
     const urgentRiskCount = riskData ? (riskData.critical + riskData.warning) : 0;
 
+    // Phase 4: Start a new conversation (reset UI only, backend creates lazily)
+    const handleNewChat = () => {
+        abortControllerRef.current?.abort();
+        setCurrentConversationId(null);
+        setMessages([WELCOME_MSG]);
+        setShowSuggestions(true);
+        setIsLoading(false);
+        setShowConversations(false);
+    };
+
+    // Phase 4: Delete a conversation
+    const handleDeleteConversation = async (convId: number, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Xóa hội thoại này?')) return;
+        try {
+            await api.delete(`/ai/conversations/${convId}`);
+            setConversations(prev => prev.filter(c => c.id !== convId));
+            if (currentConversationId === convId) handleNewChat();
+            toast.success('Xóa thành công');
+        } catch {
+            toast.error('Không thể xóa hội thoại');
+        }
+    };
+
     return (
         <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
             {/* Chat Window */}
             {isOpen && (
                 <div className="bg-white w-[380px] sm:w-[450px] h-[580px] max-h-[85vh] rounded-2xl shadow-2xl border border-gray-200 flex flex-col mb-4 overflow-hidden animate-in slide-in-from-bottom-5 fade-in duration-200">
-                    {/* Header */}
+                     {/* Header */}
                     <div className="bg-gradient-to-r from-blue-600 to-indigo-600 p-4 text-white flex justify-between items-center shadow-md z-10 flex-shrink-0">
                         <div className="flex items-center gap-2">
                             <div className="bg-white/20 p-1.5 rounded-lg">
@@ -284,20 +349,21 @@ export default function AIChatBot() {
                             </div>
                         </div>
                         <div className="flex gap-1">
+                            {/* New Chat button */}
                             <button
-                                onClick={() => {
-                                    abortControllerRef.current?.abort();
-                                    setMessages([{
-                                        id: 'welcome', role: 'ai',
-                                        content: 'Chào bạn! Mình là AI Trợ lý Quản lý Dự án.\n\nBạn muốn biết thông tin gì cứ hỏi mình nhé!'
-                                    }]);
-                                    setShowSuggestions(true);
-                                    setIsLoading(false);
-                                }}
+                                onClick={handleNewChat}
                                 className="text-blue-100 p-1.5 rounded-lg hover:bg-white/10 hover:text-white transition-colors"
-                                title="Xóa lịch sử"
+                                title="Hội thoại mới"
                             >
-                                <Trash2 className="h-4 w-4" />
+                                <Plus className="h-4 w-4" />
+                            </button>
+                            {/* History / Conversation list button */}
+                            <button
+                                onClick={() => setShowConversations(!showConversations)}
+                                className={`text-blue-100 p-1.5 rounded-lg transition-colors ${showConversations ? 'bg-white/20 text-white' : 'hover:bg-white/10 hover:text-white'}`}
+                                title="Lịch sử hội thoại"
+                            >
+                                <Clock className="h-4 w-4" />
                             </button>
                             <button
                                 onClick={handleSync}
@@ -319,6 +385,40 @@ export default function AIChatBot() {
                             </button>
                         </div>
                     </div>
+
+                    {/* Conversation List Panel (Phase 4) */}
+                    {showConversations && (
+                        <div className="flex-shrink-0 bg-gray-50 border-b border-gray-200 max-h-52 overflow-y-auto">
+                            <div className="p-2 flex items-center justify-between border-b border-gray-100">
+                                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Lịch sử hội thoại</span>
+                                {isLoadingConversations && <Loader2 className="h-3 w-3 animate-spin text-gray-400" />}
+                            </div>
+                            {conversations.length === 0 && !isLoadingConversations ? (
+                                <p className="text-xs text-gray-400 p-3 text-center">Chưa có hội thoại nào</p>
+                            ) : (
+                                conversations.map(conv => (
+                                    <div
+                                        key={conv.id}
+                                        onClick={() => loadConversationMessages(conv.id)}
+                                        className={`flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-blue-50 transition-colors group ${
+                                            currentConversationId === conv.id ? 'bg-blue-50 border-l-2 border-blue-500' : ''
+                                        }`}
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <MessageSquare className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                                            <span className="text-xs text-gray-700 truncate">{conv.title}</span>
+                                        </div>
+                                        <button
+                                            onClick={(e) => handleDeleteConversation(conv.id, e)}
+                                            className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 p-1 flex-shrink-0 transition-opacity"
+                                        >
+                                            <Trash2 className="h-3 w-3" />
+                                        </button>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
 
                     {/* Risk Alert Banner */}
                     {!showSettings && riskData && urgentRiskCount > 0 && (

@@ -16,6 +16,7 @@ from app.models.project import Project as ProjectModel
 from app.models.boq import BOQItem as BOQItemModel
 from app.models.task import Task as TaskModel
 from app.models.block import Block as BlockModel
+from app.models.ai_conversation import AIConversation, AIMessage as AIMessageModel
 from app.api import deps
 from app.models.user import User
 from app.core.config import settings
@@ -38,6 +39,8 @@ class ChatRequest(BaseModel):
     api_key: str | None = None
     history: List[ChatMessage] = []  # Multi-turn conversation history
     project_id: Optional[int] = None  # If None => all projects
+    conversation_id: Optional[int] = None  # Phase 4: persist to DB if provided
+
 
 # ============================================================
 # UTILITIES
@@ -765,12 +768,13 @@ def chat_stream(
     current_user: User = Depends(deps.get_current_active_user)
 ):
     """
-    [Phase 2] Streaming AI chat via Server-Sent Events (SSE).
+    [Phase 2 + Phase 4] Streaming AI chat via Server-Sent Events (SSE).
+    If conversation_id is provided, saves the user message + AI response to DB.
 
     Response format (text/event-stream):
-      data: {"token": "<chunk_text>"}\n\n   -- partial text chunk
-      data: {"done": true}\n\n              -- stream completion signal
-      data: {"error": "<message>"}\n\n       -- error signal
+      data: {"token": "<chunk_text>"}\\n\\n   -- partial text chunk
+      data: {"done": true, "conversation_id": <int>}\\n\\n  -- stream completion signal
+      data: {"error": "<message>"}\\n\\n       -- error signal
     """
     active_key = request_data.api_key if request_data.api_key else settings.GEMINI_API_KEY
     if not active_key:
@@ -787,7 +791,16 @@ def chat_stream(
         contents.append({"role": role, "parts": [msg.content]})
     contents.append({"role": "user", "parts": [request_data.message]})
 
+    # Resolve conversation_id for persistence
+    conversation_id = request_data.conversation_id
+    user_id = current_user.id
+    project_id = request_data.project_id
+    user_message = request_data.message
+
     def event_generator():
+        nonlocal conversation_id
+        full_response = []
+
         try:
             genai.configure(api_key=active_key)
             model = genai.GenerativeModel(
@@ -798,11 +811,50 @@ def chat_stream(
 
             for chunk in response_stream:
                 if chunk.text:
+                    full_response.append(chunk.text)
                     payload = json.dumps({"token": chunk.text}, ensure_ascii=False)
                     yield f"data: {payload}\n\n"
 
-            # Signal stream completion
-            yield f'data: {json.dumps({"done": True})}\n\n'
+            # --- Phase 4: Persist to DB after stream completes ---
+            ai_reply = "".join(full_response)
+            try:
+                # Create conversation if needed, or auto-create for new chats
+                if conversation_id is None:
+                    # Auto-create conversation with first user message as title
+                    title = (user_message[:60] + "...") if len(user_message) > 60 else user_message
+                    conv = AIConversation(
+                        user_id=user_id,
+                        project_id=project_id,
+                        title=title,
+                    )
+                    db.add(conv)
+                    db.flush()
+                    conversation_id = conv.id
+                else:
+                    # Update updated_at on existing conversation
+                    conv = db.query(AIConversation).filter_by(id=conversation_id).first()
+                    if conv:
+                        conv.updated_at = datetime.utcnow()
+
+                # Save user message
+                db.add(AIMessageModel(
+                    conversation_id=conversation_id,
+                    role="user",
+                    content=user_message,
+                ))
+                # Save AI response
+                db.add(AIMessageModel(
+                    conversation_id=conversation_id,
+                    role="ai",
+                    content=ai_reply,
+                ))
+                db.commit()
+            except Exception as db_err:
+                print(f"[AI Stream] DB save error: {db_err}")
+                db.rollback()
+
+            # Signal stream completion with conversation_id
+            yield f'data: {json.dumps({"done": True, "conversation_id": conversation_id})}\n\n'
 
         except Exception as e:
             print(f"[AI Stream] Error: {e}")
@@ -1046,8 +1098,132 @@ def get_risk_analysis(
             f"🔴 {len(critical_list)} nghiêm trọng, "
             f"⚠️ {len(warning_list)} cảnh báo, "
             f"🟡 {len(info_list)} thông tin"
-            if risks else "✅ Không phát hiện rủi ro đáng kể"
+        if risks else "✅ Không phát hiện rủi ro đáng kể"
         ),
         "generated_at": today.isoformat(),
     }
 
+
+# ============================================================
+# PHASE 4: AI CONVERSATION PERSISTENCE ENDPOINTS
+# ============================================================
+
+@router.get("/conversations")
+def list_conversations(
+    project_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """List all AI conversations for the current user, optionally filtered by project."""
+    query = db.query(AIConversation).filter(
+        AIConversation.user_id == current_user.id
+    )
+    if project_id is not None:
+        query = query.filter(AIConversation.project_id == project_id)
+
+    conversations = query.order_by(AIConversation.updated_at.desc()).all()
+
+    return [
+        {
+            "id": c.id,
+            "title": c.title,
+            "project_id": c.project_id,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+            "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+            "message_count": len(c.messages),
+        }
+        for c in conversations
+    ]
+
+
+@router.post("/conversations")
+def create_conversation(
+    title: Optional[str] = None,
+    project_id: Optional[int] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """Create a new AI conversation for the current user."""
+    conv = AIConversation(
+        user_id=current_user.id,
+        project_id=project_id,
+        title=title or "Cuộc trò chuyện mới",
+    )
+    db.add(conv)
+    db.commit()
+    db.refresh(conv)
+    return {
+        "id": conv.id,
+        "title": conv.title,
+        "project_id": conv.project_id,
+        "created_at": conv.created_at.isoformat(),
+    }
+
+
+@router.get("/conversations/{conversation_id}/messages")
+def get_conversation_messages(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """Get all messages in an AI conversation."""
+    conv = db.query(AIConversation).filter(
+        AIConversation.id == conversation_id,
+        AIConversation.user_id == current_user.id
+    ).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    return {
+        "conversation_id": conv.id,
+        "title": conv.title,
+        "project_id": conv.project_id,
+        "messages": [
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "created_at": m.created_at.isoformat() if m.created_at else None,
+            }
+            for m in conv.messages
+        ]
+    }
+
+
+@router.delete("/conversations/{conversation_id}")
+def delete_conversation(
+    conversation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """Delete an AI conversation and its messages."""
+    conv = db.query(AIConversation).filter(
+        AIConversation.id == conversation_id,
+        AIConversation.user_id == current_user.id
+    ).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    db.delete(conv)
+    db.commit()
+    return {"message": "Conversation deleted successfully"}
+
+
+@router.patch("/conversations/{conversation_id}/title")
+def update_conversation_title(
+    conversation_id: int,
+    title: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_active_user)
+):
+    """Update the title of an AI conversation."""
+    conv = db.query(AIConversation).filter(
+        AIConversation.id == conversation_id,
+        AIConversation.user_id == current_user.id
+    ).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    conv.title = title
+    db.commit()
+    return {"id": conv.id, "title": conv.title}

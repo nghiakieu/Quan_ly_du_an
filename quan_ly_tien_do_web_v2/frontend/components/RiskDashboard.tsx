@@ -201,7 +201,7 @@ interface RiskDashboardProps {
 
 export default function RiskDashboard({ projectId, compact = false }: RiskDashboardProps) {
   const url =
-    `${API_BASE}/api/v1/ai/risk-analysis` +
+    `${API_BASE}/ai/risk-analysis` +
     (projectId ? `?project_id=${projectId}` : "");
 
   const { data, error, isLoading, mutate } = useSWR<RiskAnalysisResponse>(url, fetcher, {

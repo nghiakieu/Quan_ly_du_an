@@ -142,8 +142,9 @@ export default function AIChatBot() {
         if (isLoadingRisk || riskData) return;
         setIsLoadingRisk(true);
         try {
-            const res = await api.get('/ai/risk-analysis');
-            setRiskData(res.data);
+            // Tạm thời vô hiệu hóa theo yêu cầu
+            // const res = await api.get('/ai/risk-analysis');
+            // setRiskData(res.data);
         } catch (e) {
             // Silent fail
         } finally {
@@ -302,7 +303,6 @@ export default function AIChatBot() {
             setTimeout(() => loadRiskAnalysis(), 500);
         } catch (error: any) {
             toast.error(error.response?.data?.detail || "Lỗi khi đồng bộ dữ liệu.");
-        } finally {
         } finally {
             setIsSyncing(false);
         }

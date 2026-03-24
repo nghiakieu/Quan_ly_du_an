@@ -192,7 +192,7 @@ export default function ProjectDashboard({ project }: ProjectDashboardProps) {
 
       {/* Risk Dashboard compact — top 3 rủi ro của dự án */}
       <div className="rounded-2xl overflow-hidden bg-slate-900/5 ring-1 ring-slate-900/10">
-        <RiskDashboard projectId={project.id} compact />
+        {/* <RiskDashboard projectId={project.id} compact /> */}
       </div>
 
       {/* AI Generated Charts widget */}

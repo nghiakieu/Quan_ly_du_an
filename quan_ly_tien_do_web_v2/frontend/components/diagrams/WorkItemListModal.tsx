@@ -5,6 +5,7 @@ import { X, Search, Copy, ClipboardPaste, AlertCircle, Check, Save } from 'lucid
 import { toast } from 'sonner';
 
 import { BoxObject } from './SimpleDragTest';
+import { updateDiagramSheetConfig, syncDiagramFromSheet, syncDiagramToSheet } from '@/lib/api';
 
 interface EditableBoxObject extends BoxObject {
     tempIdx: number;
@@ -15,12 +16,20 @@ interface WorkItemListModalProps {
     onClose: () => void;
     objects: BoxObject[];
     onUpdateObjects: (updatedObjects: BoxObject[]) => void;
+    diagramId?: number | string | null;
+    initialSheetUrl?: string;
+    initialSheetTab?: string;
+    onSyncComplete?: () => void;
 }
 
-export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateObjects }: WorkItemListModalProps) {
+export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateObjects, diagramId, initialSheetUrl, initialSheetTab, onSyncComplete }: WorkItemListModalProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [localObjects, setLocalObjects] = useState<EditableBoxObject[]>([]);
     const [isDirty, setIsDirty] = useState(false);
+    
+    const [sheetUrl, setSheetUrl] = useState(initialSheetUrl || '');
+    const [sheetTab, setSheetTab] = useState(initialSheetTab || '');
+    const [isSyncing, setIsSyncing] = useState(false);
 
     // Initialize local state when modal opens
     useEffect(() => {
@@ -29,8 +38,49 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
             const sorted = [...objects].sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true }));
             setLocalObjects(sorted.map((obj, i) => ({ ...obj, tempIdx: i + 1 })));
             setIsDirty(false);
+            setSheetUrl(initialSheetUrl || '');
+            setSheetTab(initialSheetTab || '');
         }
-    }, [isOpen, objects]);
+    }, [isOpen, objects, initialSheetUrl, initialSheetTab]);
+
+    const handleSaveSheetConfig = async () => {
+        if (!diagramId) return;
+        try {
+            await updateDiagramSheetConfig(diagramId, { google_sheet_url: sheetUrl, google_sheet_tab_name: sheetTab });
+        } catch (error: any) {
+            console.error(error);
+        }
+    };
+
+    const handleSyncFromSheet = async () => {
+        if (!diagramId) return;
+        setIsSyncing(true);
+        try {
+            await handleSaveSheetConfig();
+            await syncDiagramFromSheet(diagramId);
+            toast.success("Đã đồng bộ từ Google Sheets");
+            if (onSyncComplete) onSyncComplete();
+            onClose(); // Automatically close and let the main view refresh
+        } catch (error: any) {
+            toast.error("Lỗi đồng bộ: " + (error.response?.data?.detail || error.message));
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
+    const handleSyncToSheet = async () => {
+        if (!diagramId) return;
+        setIsSyncing(true);
+        try {
+            await handleSaveSheetConfig();
+            const res = await syncDiagramToSheet(diagramId);
+            toast.success(res.message || "Đã đẩy dữ liệu lên Google Sheets");
+        } catch (error: any) {
+            toast.error("Lỗi đẩy dữ liệu: " + (error.response?.data?.detail || error.message));
+        } finally {
+            setIsSyncing(false);
+        }
+    };
 
     const filteredObjects = useMemo(() => {
         return localObjects.filter(obj => 
@@ -40,10 +90,10 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
     }, [localObjects, searchTerm]);
 
     const handleCopyAll = () => {
-        const header = "STT\tID Đối tượng\tTên (Label)\tTrạng thái\tSố lượng BOQ\n";
+        const header = "STT\tID Đối tượng\tTên (Label)\tTrạng thái\tNgày hoàn thành\tSố lượng BOQ\n";
         const rows = localObjects.map(obj => {
             const boqCount = Object.keys(obj.boqIds || {}).length;
-            return `${obj.tempIdx}\t${obj.id}\t${obj.label}\t${obj.status || 'not_started'}\t${boqCount}`;
+            return `${obj.tempIdx}\t${obj.id}\t${obj.label}\t${obj.status || 'not_started'}\t${obj.completionDate || ''}\t${boqCount}`;
         }).join('\n');
         
         navigator.clipboard.writeText(header + rows);
@@ -84,12 +134,17 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
                 if (targetIdx !== -1) {
                     const newId = row[1]?.trim();
                     const newLabel = row[2]?.trim();
+                    // Optional columns from paste if they exist
+                    const newStatus = row[3]?.trim();
+                    const newCompletionDate = row[4]?.trim();
                     
-                    if (newId !== undefined || newLabel !== undefined) {
+                    if (newId !== undefined || newLabel !== undefined || newStatus !== undefined || newCompletionDate !== undefined) {
                         newLocalObjects[targetIdx] = { 
                             ...newLocalObjects[targetIdx],
                             id: newId || newLocalObjects[targetIdx].id,
-                            label: newLabel || newLocalObjects[targetIdx].label
+                            label: newLabel || newLocalObjects[targetIdx].label,
+                            ...(newStatus && { status: newStatus as any }),
+                            ...(newCompletionDate && { completionDate: newCompletionDate })
                         };
                         updateCount++;
                     }
@@ -157,34 +212,71 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
                 </div>
 
                 {/* Toolbar */}
-                <div className="p-4 border-b border-gray-100 flex flex-wrap items-center justify-between gap-4">
-                    <div className="relative flex-1 min-w-[300px]">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Tìm kiếm theo ID hoặc Tên..."
-                            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={handleCopyAll}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all text-sm font-medium shadow-sm active:scale-95"
-                            title="Copy STT, ID, Label"
-                        >
-                            <Copy className="h-4 w-4" />
-                            Copy sang Excel
-                        </button>
-                        <button
-                            onClick={handlePasteFromExcel}
-                            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-200 active:scale-95"
-                            title="Paste dữ liệu từ Excel (Cột 1: STT, Cột 2: ID, Cột 3: Label)"
-                        >
-                            <ClipboardPaste className="h-4 w-4" />
-                            Paste từ Excel
-                        </button>
+                <div className="p-4 border-b border-gray-100 flex flex-col gap-4">
+                    {/* Google Sheets Sync Row */}
+                    {diagramId && (
+                        <div className="flex flex-wrap items-center gap-3 bg-green-50/50 p-3 rounded-lg border border-green-100">
+                            <span className="text-sm font-semibold text-green-800 shrink-0">Đồng bộ Google Sheets:</span>
+                            <input 
+                                type="text" 
+                                placeholder="URL Google Sheet" 
+                                className="flex-1 min-w-[200px] px-3 py-1.5 bg-white border border-green-200 rounded-md text-sm outline-none focus:border-green-400"
+                                value={sheetUrl}
+                                onChange={(e) => setSheetUrl(e.target.value)}
+                            />
+                            <input 
+                                type="text" 
+                                placeholder="Tên Tab (VD: Sheet1)" 
+                                className="w-40 px-3 py-1.5 bg-white border border-green-200 rounded-md text-sm outline-none focus:border-green-400"
+                                value={sheetTab}
+                                onChange={(e) => setSheetTab(e.target.value)}
+                            />
+                            <button
+                                onClick={handleSyncFromSheet}
+                                disabled={isSyncing}
+                                className="px-3 py-1.5 bg-green-600 text-white rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors"
+                            >
+                                {isSyncing ? "..." : "Tải từ Sheet"}
+                            </button>
+                            <button
+                                onClick={handleSyncToSheet}
+                                disabled={isSyncing}
+                                className="px-3 py-1.5 bg-white border border-green-600 text-green-700 rounded-md text-sm font-medium hover:bg-green-50 disabled:opacity-50 transition-colors"
+                            >
+                                {isSyncing ? "..." : "Đẩy lên Sheet"}
+                            </button>
+                        </div>
+                    )}
+                    
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="relative flex-1 min-w-[300px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <input
+                                type="text"
+                                placeholder="Tìm kiếm theo ID hoặc Tên..."
+                                className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={handleCopyAll}
+                                className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-all text-sm font-medium shadow-sm active:scale-95"
+                                title="Copy STT, ID, Label"
+                            >
+                                <Copy className="h-4 w-4" />
+                                Copy sang Excel
+                            </button>
+                            <button
+                                onClick={handlePasteFromExcel}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-sm font-medium shadow-lg shadow-blue-200 active:scale-95"
+                                title="Paste dữ liệu từ Excel (Cột 1: STT, Cột 2: ID, Cột 3: Label)"
+                            >
+                                <ClipboardPaste className="h-4 w-4" />
+                                Paste từ Excel
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -199,6 +291,7 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
                                     <th className="px-6 py-4">Tên (Label)</th>
                                     <th className="px-6 py-4">Loại</th>
                                     <th className="px-6 py-4">Trạng thái</th>
+                                    <th className="px-6 py-4">Ngày hoàn thành</th>
                                     <th className="px-6 py-4 text-right">BOQ Items</th>
                                 </tr>
                             </thead>
@@ -245,6 +338,11 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
                                                      obj.status === 'in_progress' ? 'Đang làm' : 'Chưa bắt đầu'}
                                                 </span>
                                             </td>
+                                            <td className="px-6 py-4">
+                                                <span className="text-xs text-gray-500 font-medium">
+                                                    {obj.completionDate ? new Date(obj.completionDate).toLocaleDateString('vi-VN') : '-'}
+                                                </span>
+                                            </td>
                                             <td className="px-6 py-4 text-right">
                                                 <span className="text-sm font-medium text-gray-400">
                                                     {Object.keys(obj.boqIds || {}).length}
@@ -263,7 +361,7 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
                     <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-1.5">
                             <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                            <span>Paste từ Excel 3 cột: [Cột 1: STT] [Cột 2: ID Mới] [Cột 3: Tên Label Mới]</span>
+                            <span>Paste từ Excel ít nhất 3 cột: [1: STT] [2: ID Mới] [3: Tên Label Mới] - Có thể thêm cột Trạng thái, Ngày hoàn thành</span>
                         </div>
                         <div className="flex items-center gap-1.5 font-medium text-amber-600">
                             <AlertCircle className="h-3.5 w-3.5" />

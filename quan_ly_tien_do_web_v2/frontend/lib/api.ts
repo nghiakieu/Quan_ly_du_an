@@ -132,6 +132,8 @@ export interface Diagram {
     project_id?: number;
     objects?: string;
     boq_data?: string;
+    google_sheet_url?: string;
+    google_sheet_tab_name?: string;
     updated_at?: string;
 }
 
@@ -300,6 +302,25 @@ export const updateDiagram = async (id: number | string, data: {
 
 export const deleteDiagram = async (id: number | string): Promise<Diagram> => {
     const response = await api.delete(`/diagrams/${id}`);
+    return response.data;
+};
+
+// --- GOOGLE SHEETS SYNC API ---
+export const updateDiagramSheetConfig = async (id: number | string, data: {
+    google_sheet_url: string;
+    google_sheet_tab_name?: string;
+}): Promise<Diagram> => {
+    const response = await api.put(`/diagrams/${id}/sheet-config`, data);
+    return response.data;
+};
+
+export const syncDiagramFromSheet = async (id: number | string): Promise<Diagram> => {
+    const response = await api.post(`/diagrams/${id}/sync-from-sheet`);
+    return response.data;
+};
+
+export const syncDiagramToSheet = async (id: number | string): Promise<{status: string, message: string}> => {
+    const response = await api.post(`/diagrams/${id}/sync-to-sheet`);
     return response.data;
 };
 

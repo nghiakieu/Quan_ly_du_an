@@ -16,11 +16,15 @@ class DiagramUpdate(BaseModel):
     description: Optional[str] = None
     objects: Optional[str] = None
     boq_data: Optional[str] = None
+    google_sheet_url: Optional[str] = None
+    google_sheet_tab_name: Optional[str] = None
 
 class Diagram(DiagramBase):
     id: int
     objects: Optional[str] = None
     boq_data: Optional[str] = None
+    google_sheet_url: Optional[str] = None
+    google_sheet_tab_name: Optional[str] = None
     cached_completed_value: Optional[float] = None
     updated_at: Optional[datetime] = None
 

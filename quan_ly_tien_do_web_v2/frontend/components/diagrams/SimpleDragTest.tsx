@@ -1188,6 +1188,10 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
     const isSavingRef = React.useRef(false);
     const [syncMessage, setSyncMessage] = useState<string | null>(null);
     const isFirstLoad = React.useRef(true);
+    
+    // Google Sheets Config State
+    const [googleSheetUrl, setGoogleSheetUrl] = useState<string>('');
+    const [googleSheetTabName, setGoogleSheetTabName] = useState<string>('');
 
 
     const fetchDiagramData = async () => {
@@ -1214,6 +1218,8 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
 
                 if (diagramData.name) setLocalDiagramName(diagramData.name);
                 if (diagramData.updated_at) setLastUpdated(diagramData.updated_at);
+                if (diagramData.google_sheet_url) setGoogleSheetUrl(diagramData.google_sheet_url);
+                if (diagramData.google_sheet_tab_name) setGoogleSheetTabName(diagramData.google_sheet_tab_name);
 
                 if (JSON.stringify(loadedObjects) !== lastSavedData.current.objects ||
                     JSON.stringify(loadedBoq) !== lastSavedData.current.boqData) {
@@ -2582,6 +2588,9 @@ export default function SimpleDragTest({ projectId, diagramId: propDiagramId, di
                     // Force save after bulk update
                     handleForceSave(updated);
                 }}
+                diagramId={currentDiagramId!}
+                initialSheetUrl={googleSheetUrl}
+                initialSheetTab={googleSheetTabName}
             />
         </div >
     );

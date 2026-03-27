@@ -3,6 +3,8 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from sqlalchemy.orm import Session, defer
 import asyncio
 import json
+from pydantic import BaseModel
+from app.services.google_sheets import sync_from_sheet, sync_to_sheet
 from app.models.boq import BOQItem
 from app.utils.progress_cache import recalculate_diagram_progress, recalculate_project_progress
 
@@ -182,6 +184,101 @@ def update_diagram(
     )
 
     return diagram
+
+class SyncSheetRequest(BaseModel):
+    google_sheet_url: str
+    google_sheet_tab_name: Optional[str] = None
+
+@router.put("/{diagram_id}/sheet-config", response_model=Diagram)
+def update_sheet_config(
+    *,
+    db: Session = Depends(get_db),
+    diagram_id: int,
+    config: SyncSheetRequest,
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    diagram = db.query(DiagramModel).filter(DiagramModel.id == diagram_id).first()
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagram not found")
+    
+    diagram.google_sheet_url = config.google_sheet_url
+    diagram.google_sheet_tab_name = config.google_sheet_tab_name
+    db.commit()
+    db.refresh(diagram)
+    
+    fetched_items = db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).all()
+    boq_list_resp = []
+    for bi in fetched_items:
+        boq_list_resp.append({
+            "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+            "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+            "unitPrice": bi.price, "order": bi.order,
+            "contractAmount": round(bi.design_qty * bi.price, 2) if bi.price else 0,
+            "actualAmount": round(bi.actual_qty * bi.price, 2) if bi.price else 0,
+            "planAmount": round(bi.plan_qty * bi.price, 2) if bi.price else 0
+        })
+    setattr(diagram, "boq_data", json.dumps(boq_list_resp, ensure_ascii=False) if boq_list_resp else "[]")
+    
+    return diagram
+
+@router.post("/{diagram_id}/sync-from-sheet", response_model=Diagram)
+def api_sync_from_sheet(
+    *,
+    db: Session = Depends(get_db),
+    diagram_id: int,
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    diagram = db.query(DiagramModel).filter(DiagramModel.id == diagram_id).first()
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagram not found")
+    if not diagram.google_sheet_url:
+        raise HTTPException(status_code=400, detail="Chưa cấu hình Google Sheet URL cho sơ đồ này")
+        
+    current_objects = json.loads(diagram.objects) if diagram.objects else []
+    
+    try:
+        updated_objects = sync_from_sheet(diagram.google_sheet_url, diagram.google_sheet_tab_name or "", current_objects)
+        diagram.objects = json.dumps(updated_objects, ensure_ascii=False)
+        db.commit()
+        db.refresh(diagram)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi đồng bộ từ Sheet: {str(e)}")
+        
+    fetched_items = db.query(BOQItem).filter(BOQItem.diagram_id == diagram.id).all()
+    boq_list_resp = []
+    for bi in fetched_items:
+        boq_list_resp.append({
+            "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
+            "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
+            "unitPrice": bi.price, "order": bi.order,
+            "contractAmount": round(bi.design_qty * bi.price, 2) if bi.price else 0,
+            "actualAmount": round(bi.actual_qty * bi.price, 2) if bi.price else 0,
+            "planAmount": round(bi.plan_qty * bi.price, 2) if bi.price else 0
+        })
+    setattr(diagram, "boq_data", json.dumps(boq_list_resp, ensure_ascii=False) if boq_list_resp else "[]")
+    
+    return diagram
+
+@router.post("/{diagram_id}/sync-to-sheet")
+def api_sync_to_sheet(
+    *,
+    db: Session = Depends(get_db),
+    diagram_id: int,
+    current_user: User = Depends(deps.get_current_active_user)
+) -> Any:
+    diagram = db.query(DiagramModel).filter(DiagramModel.id == diagram_id).first()
+    if not diagram:
+        raise HTTPException(status_code=404, detail="Diagram not found")
+    if not diagram.google_sheet_url:
+        raise HTTPException(status_code=400, detail="Chưa cấu hình Google Sheet URL cho sơ đồ này")
+        
+    current_objects = json.loads(diagram.objects) if diagram.objects else []
+    try:
+        sync_to_sheet(diagram.google_sheet_url, diagram.google_sheet_tab_name or "", current_objects)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi đẩy lên Sheet: {str(e)}")
+        
+    return {"status": "success", "message": "Đã đẩy dữ liệu thành công lên Google Sheets"}
 
 @router.get("/latest", response_model=Diagram)
 def read_latest_diagram(

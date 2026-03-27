@@ -12,6 +12,10 @@ class Diagram(Base):
     objects = Column(Text, nullable=True)   # JSON string of objects
     boq_data = Column(Text, nullable=True)  # JSON string of BOQ (Legacy/Cache)
     
+    # Google Sheets Sync config
+    google_sheet_url = Column(String, nullable=True)
+    google_sheet_tab_name = Column(String, nullable=True)
+    
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=True) # Allow null for transition
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())

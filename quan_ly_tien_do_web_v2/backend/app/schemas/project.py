@@ -29,7 +29,20 @@ class ProjectUpdate(BaseModel):
     drive_url: Optional[str] = None
     sheet_url: Optional[str] = None
 
-# Diagram summary for embedding in project response
+# Lightweight diagram info for project list page (no objects/boq_data)
+class DiagramBrief(BaseModel):
+    id: int
+    name: str
+    description: Optional[str] = None
+    updated_at: Optional[datetime] = None
+    cached_progress_percent: Optional[float] = None
+    cached_target_value: Optional[float] = None
+    cached_completed_value: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+# Full diagram summary for single project detail page
 class DiagramSummary(BaseModel):
     id: int
     name: str
@@ -45,6 +58,22 @@ class DiagramSummary(BaseModel):
     class Config:
         from_attributes = True
 
+# Lightweight project for list endpoint (uses DiagramBrief, no heavy data)
+class ProjectList(ProjectBase):
+    id: int
+    manager_id: Optional[int] = None
+    created_at: datetime
+    updated_at: datetime
+    cached_progress_percent: Optional[float] = None
+    cached_total_diagrams: Optional[int] = None
+    cached_completed_value: Optional[float] = None
+    cached_plan_value: Optional[float] = None
+    diagrams: List[DiagramBrief] = []
+
+    class Config:
+        from_attributes = True
+
+# Full project for detail endpoint
 class Project(ProjectBase):
     id: int
     manager_id: Optional[int] = None

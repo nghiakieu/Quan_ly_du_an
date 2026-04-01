@@ -29,6 +29,8 @@ class Project(Base):
     # Caching Progress
     cached_progress_percent = Column(Float, nullable=True)
     cached_total_diagrams = Column(Integer, nullable=True)
+    cached_completed_value = Column(Float, nullable=True)   # Total actual value across all diagrams
+    cached_plan_value = Column(Float, nullable=True)         # Total plan value across all diagrams
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

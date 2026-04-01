@@ -12,7 +12,7 @@ import io
 
 router = APIRouter()
 
-@router.get("/", response_model=List[schemas.Project])
+@router.get("/", response_model=List[schemas.ProjectList])
 def read_projects(
     db: Session = Depends(get_db),
     skip: int = 0,
@@ -21,54 +21,19 @@ def read_projects(
     current_user: User = Depends(deps.get_current_active_user),
 ) -> Any:
     """
-    Retrieve projects with optional status filter.
-    Eager-loads diagrams for progress calculation.
+    Retrieve projects list (lightweight).
+    Uses cached values for progress/values - no heavy BOQ queries.
+    Defers objects and boq_data columns for performance.
     """
     try:
         query = db.query(models.Project).options(
-            joinedload(models.Project.diagrams)
+            joinedload(models.Project.diagrams).defer(models.Diagram.objects).defer(models.Diagram.boq_data),
+            defer(models.Project.boq_data),
         )
         if status:
             query = query.filter(models.Project.status == status)
         projects = query.offset(skip).limit(limit).all()
         
-        # Calculate on-the-fly values for charts
-        for p in projects:
-            p_total_design = 0.0
-            p_total_actual = 0.0
-            p_total_plan = 0.0
-            
-            # Load project master BOQ if it exists to get total design value context
-            # but usually we aggregate from diagrams for progress
-            
-            for d in p.diagrams:
-                # Calculate for each diagram
-                items = db.query(models.boq.BOQItem).filter(models.boq.BOQItem.diagram_id == d.id).all()
-                d.cached_target_value = sum((item.design_qty or 0) * (item.price or 0) for item in items)
-                d.cached_completed_value = sum((item.actual_qty or 0) * (item.price or 0) for item in items)
-                d.cached_plan_value = sum((item.plan_qty or 0) * (item.price or 0) for item in items)
-                
-                # IMPORTANT: Populate boq_data for the schema
-                boq_list = []
-                for bi in items:
-                    boq_list.append({
-                        "id": bi.external_id, "name": bi.work_name, "unit": bi.unit,
-                        "designQty": bi.design_qty, "actualQty": bi.actual_qty, "planQty": bi.plan_qty,
-                        "unitPrice": bi.price, "order": bi.order
-                    })
-                setattr(d, "boq_data", json.dumps(boq_list, ensure_ascii=False) if boq_list else "[]")
-                
-                p_total_design += d.cached_target_value
-                p_total_actual += d.cached_completed_value
-                p_total_plan += d.cached_plan_value
-            
-            # Set transient attributes for the schema
-            p.cached_completed_value = p_total_actual
-            p.cached_plan_value = p_total_plan
-            # If total_budget is not set, use total design from diagrams
-            if not p.total_budget and p_total_design > 0:
-                p.total_budget = p_total_design
-
         return projects
     except Exception as e:
         import traceback

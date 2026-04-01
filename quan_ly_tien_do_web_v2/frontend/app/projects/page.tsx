@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
-import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText, Users, Upload, ListTodo, X } from 'lucide-react';
+import { FolderGit2, Plus, Calendar, Trash2, ChevronRight, Building2, Banknote, Clock, FileText, Globe, FolderOpen, BookType, BookOpenText, Users, Upload, ListTodo, X, RefreshCw, ServerCrash } from 'lucide-react';
 import { getProjects, createProject, deleteProject, updateProject, extractErrorMessage, type Project } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { toast } from 'sonner';
@@ -55,7 +55,9 @@ function ProjectLinkButton({ project, type, icon: Icon, colorClass, title, onUpd
 export default function ProjectsDashboard() {
     const { mutate } = useSWRConfig();
     const { data: projects = [], error, isLoading, mutate: mutateProjects } = useSWR<Project[]>('/projects/');
-    // loading state removed, using isLoading from SWR
+    // Long-loading state for server cold start detection
+    const [isLongLoading, setIsLongLoading] = useState(false);
+    const loadingTimerRef = useRef<NodeJS.Timeout | null>(null);
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
@@ -72,7 +74,25 @@ export default function ProjectsDashboard() {
     const [boqUploadProjectId, setBoqUploadProjectId] = useState<number | null>(null);
     const [boqViewerProjectId, setBoqViewerProjectId] = useState<number | null>(null);
 
-    // useEffect removed, SWR handles fetching automatically
+    // Detect long loading (server cold start)
+    useEffect(() => {
+        if (isLoading && projects.length === 0) {
+            loadingTimerRef.current = setTimeout(() => {
+                setIsLongLoading(true);
+            }, 8000); // 8 seconds threshold
+        } else {
+            setIsLongLoading(false);
+            if (loadingTimerRef.current) {
+                clearTimeout(loadingTimerRef.current);
+                loadingTimerRef.current = null;
+            }
+        }
+        return () => {
+            if (loadingTimerRef.current) {
+                clearTimeout(loadingTimerRef.current);
+            }
+        };
+    }, [isLoading, projects.length]);
 
     const handleCreateProject = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -127,12 +147,51 @@ export default function ProjectsDashboard() {
         return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
     };
 
+    // Error state with retry button
+    if (error && projects.length === 0) {
+        return (
+            <div className="flex items-center justify-center min-h-[60vh]">
+                <div className="flex flex-col items-center gap-4 text-center max-w-md">
+                    <ServerCrash className="h-12 w-12 text-red-400" />
+                    <h3 className="text-lg font-medium text-gray-900">Không thể kết nối đến server</h3>
+                    <p className="text-sm text-gray-500">
+                        Server có thể đang khởi động lại. Vui lòng thử lại sau vài giây.
+                    </p>
+                    <button
+                        onClick={() => mutateProjects()}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        <RefreshCw className="h-4 w-4" />
+                        Thử lại
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (isLoading && projects.length === 0) {
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="flex flex-col items-center gap-3">
                     <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
                     <p className="text-gray-500 text-sm">Đang tải dự án...</p>
+                    {isLongLoading && (
+                        <div className="mt-2 text-center max-w-sm">
+                            <p className="text-amber-600 text-xs font-medium">
+                                ⏳ Server đang khởi động (có thể mất 1-2 phút)
+                            </p>
+                            <p className="text-gray-400 text-xs mt-1">
+                                Server tự động tắt khi không dùng. Xin vui lòng đợi...
+                            </p>
+                            <button
+                                onClick={() => mutateProjects()}
+                                className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 rounded-md hover:bg-blue-100 transition-colors"
+                            >
+                                <RefreshCw className="h-3.5 w-3.5" />
+                                Thử lại
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         );

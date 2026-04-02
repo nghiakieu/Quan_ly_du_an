@@ -18,8 +18,42 @@ async def lifespan(app: FastAPI):
     # Base.metadata.create_all is kept for basic table creation until Alembic is fully configured.
     Base.metadata.create_all(bind=engine, checkfirst=True)
 
-    # Step 3: Create Default Admin Account if not exists
+    # Auto-migrate: Add missing columns to existing tables
+    # create_all only creates NEW tables, it won't ALTER existing ones
+    from sqlalchemy import text, inspect
     from app.db.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        inspector = inspect(engine)
+        
+        # Define columns that may be missing from existing tables
+        migrations = [
+            # (table_name, column_name, column_type_sql)
+            ("projects", "cached_completed_value", "FLOAT"),
+            ("projects", "cached_plan_value", "FLOAT"),
+            ("projects", "cached_progress_percent", "FLOAT"),
+            ("projects", "cached_total_diagrams", "INTEGER"),
+            ("diagrams", "cached_progress_percent", "FLOAT"),
+            ("diagrams", "cached_target_value", "FLOAT"),
+            ("diagrams", "cached_completed_value", "FLOAT"),
+        ]
+        
+        for table_name, col_name, col_type in migrations:
+            existing_cols = [c["name"] for c in inspector.get_columns(table_name)]
+            if col_name not in existing_cols:
+                print(f"[Migration] Adding column {table_name}.{col_name} ({col_type})")
+                db.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}'))
+                db.commit()
+            
+        print("[Migration] Schema check complete")
+    except Exception as e:
+        print(f"[Migration] Error: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+    # Step 3: Create Default Admin Account if not exists
     from app.models.user import User as UserModel
     from app.core.security import get_password_hash
     
@@ -44,6 +78,7 @@ async def lifespan(app: FastAPI):
         db.close()
 
     yield
+
 
 
 app = FastAPI(

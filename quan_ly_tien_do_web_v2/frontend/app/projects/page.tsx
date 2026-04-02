@@ -149,17 +149,34 @@ export default function ProjectsDashboard() {
 
     // Error state with retry button
     if (error && projects.length === 0) {
+        const statusCode = error?.response?.status;
+        const isServerError = statusCode === 500;
+        const errorDetail = error?.response?.data?.detail;
+        
         return (
             <div className="flex items-center justify-center min-h-[60vh]">
                 <div className="flex flex-col items-center gap-4 text-center max-w-md">
                     <ServerCrash className="h-12 w-12 text-red-400" />
-                    <h3 className="text-lg font-medium text-gray-900">Không thể kết nối đến server</h3>
+                    <h3 className="text-lg font-medium text-gray-900">
+                        {isServerError ? 'Lỗi máy chủ' : 'Không thể kết nối đến server'}
+                    </h3>
                     <p className="text-sm text-gray-500">
-                        Server có thể đang khởi động lại. Vui lòng thử lại sau vài giây.
+                        {isServerError 
+                            ? 'Máy chủ đang gặp sự cố nội bộ. Vui lòng thử lại sau.'
+                            : 'Server có thể đang khởi động lại. Vui lòng thử lại sau vài giây.'
+                        }
                     </p>
+                    {errorDetail && (
+                        <p className="text-xs text-red-400 bg-red-50 px-3 py-2 rounded-md font-mono max-w-full overflow-x-auto">
+                            {typeof errorDetail === 'string' ? errorDetail.substring(0, 200) : JSON.stringify(errorDetail).substring(0, 200)}
+                        </p>
+                    )}
                     <button
-                        onClick={() => mutateProjects()}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                        onClick={() => {
+                            // Force a full revalidation
+                            mutateProjects(undefined, { revalidate: true });
+                        }}
+                        className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors cursor-pointer"
                     >
                         <RefreshCw className="h-4 w-4" />
                         Thử lại

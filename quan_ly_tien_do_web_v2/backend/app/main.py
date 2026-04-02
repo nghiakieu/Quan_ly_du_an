@@ -20,33 +20,51 @@ async def lifespan(app: FastAPI):
 
     # Auto-migrate: Add missing columns to existing tables
     # create_all only creates NEW tables, it won't ALTER existing ones
-    from sqlalchemy import text, inspect
+    # This dynamically compares ALL model columns vs actual DB columns
+    from sqlalchemy import text, inspect as sa_inspect
     from app.db.database import SessionLocal
 
     db = SessionLocal()
     try:
-        inspector = inspect(engine)
+        inspector = sa_inspect(engine)
+        existing_tables = inspector.get_table_names()
         
-        # Define columns that may be missing from existing tables
-        migrations = [
-            # (table_name, column_name, column_type_sql)
-            ("projects", "cached_completed_value", "FLOAT"),
-            ("projects", "cached_plan_value", "FLOAT"),
-            ("projects", "cached_progress_percent", "FLOAT"),
-            ("projects", "cached_total_diagrams", "INTEGER"),
-            ("diagrams", "cached_progress_percent", "FLOAT"),
-            ("diagrams", "cached_target_value", "FLOAT"),
-            ("diagrams", "cached_completed_value", "FLOAT"),
-        ]
+        # Map SQLAlchemy types to PostgreSQL types
+        type_map = {
+            'INTEGER': 'INTEGER',
+            'BIGINTEGER': 'BIGINT',
+            'FLOAT': 'DOUBLE PRECISION',
+            'VARCHAR': 'VARCHAR',
+            'STRING': 'VARCHAR',
+            'TEXT': 'TEXT',
+            'BOOLEAN': 'BOOLEAN',
+            'DATETIME': 'TIMESTAMP WITH TIME ZONE',
+            'DATE': 'DATE',
+        }
         
-        for table_name, col_name, col_type in migrations:
-            existing_cols = [c["name"] for c in inspector.get_columns(table_name)]
-            if col_name not in existing_cols:
-                print(f"[Migration] Adding column {table_name}.{col_name} ({col_type})")
-                db.execute(text(f'ALTER TABLE {table_name} ADD COLUMN {col_name} {col_type}'))
-                db.commit()
+        for table in Base.metadata.tables.values():
+            if table.name not in existing_tables:
+                continue  # Table doesn't exist yet, create_all will handle it
+                
+            existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
             
-        print("[Migration] Schema check complete")
+            for column in table.columns:
+                if column.name not in existing_cols:
+                    # Determine PostgreSQL type from SQLAlchemy column type
+                    sa_type = type(column.type).__name__.upper()
+                    pg_type = type_map.get(sa_type, 'TEXT')
+                    
+                    # Handle special cases
+                    if hasattr(column.type, 'length') and column.type.length:
+                        pg_type = f'VARCHAR({column.type.length})'
+                    
+                    print(f"[Migration] Adding {table.name}.{column.name} ({pg_type})")
+                    db.execute(text(
+                        f'ALTER TABLE {table.name} ADD COLUMN {column.name} {pg_type}'
+                    ))
+                    db.commit()
+            
+        print("[Migration] Schema sync complete")
     except Exception as e:
         print(f"[Migration] Error: {e}")
         db.rollback()

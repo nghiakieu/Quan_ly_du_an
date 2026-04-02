@@ -45,15 +45,15 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
 
     const handleSaveSheetConfig = async () => {
         if (!diagramId) return;
-        try {
-            await updateDiagramSheetConfig(diagramId, { google_sheet_url: sheetUrl, google_sheet_tab_name: sheetTab });
-        } catch (error: any) {
-            console.error(error);
-        }
+        await updateDiagramSheetConfig(diagramId, { google_sheet_url: sheetUrl, google_sheet_tab_name: sheetTab });
     };
 
     const handleSyncFromSheet = async () => {
         if (!diagramId) return;
+        if (!sheetUrl.trim()) {
+            toast.error("Vui lòng nhập Google Sheet URL trước khi đồng bộ");
+            return;
+        }
         setIsSyncing(true);
         try {
             await handleSaveSheetConfig();
@@ -70,6 +70,10 @@ export default function WorkItemListModal({ isOpen, onClose, objects, onUpdateOb
 
     const handleSyncToSheet = async () => {
         if (!diagramId) return;
+        if (!sheetUrl.trim()) {
+            toast.error("Vui lòng nhập Google Sheet URL trước khi đẩy dữ liệu");
+            return;
+        }
         setIsSyncing(true);
         try {
             await handleSaveSheetConfig();

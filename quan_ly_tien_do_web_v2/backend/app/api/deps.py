@@ -48,6 +48,29 @@ def get_current_active_user(
         raise HTTPException(status_code=400, detail="Inactive user")
     return current_user
 
+# Optional auth - returns None if no token or invalid token
+oauth2_scheme_optional = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/login/access-token",
+    auto_error=False
+)
+
+def get_current_user_optional(
+    db: Session = Depends(get_db), token: str | None = Depends(oauth2_scheme_optional)
+) -> User | None:
+    """Returns user if valid token, None otherwise. No 401 raised."""
+    if not token:
+        return None
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        token_data = TokenPayload(**payload)
+        user = db.query(User).filter(User.id == int(token_data.sub)).first()
+        return user if user and user.is_active else None
+    except (jwt.PyJWTError, Exception):
+        return None
+
+
 def get_current_active_admin(
     current_user: User = Depends(get_current_active_user),
 ) -> User:

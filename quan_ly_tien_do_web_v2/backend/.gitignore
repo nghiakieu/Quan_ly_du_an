@@ -38,3 +38,6 @@ venv.bak/
 # SQLite databases
 *.db
 *.sqlite3
+
+# Google credentials (SENSITIVE - never commit)
+google-credentials.json
